@@ -1,0 +1,4 @@
+repository "pavotts 2026-08-20_17-00-37/pavotts@4673117961859@cloud"
+  path "/"
+    br "/main"
+    co "/main"

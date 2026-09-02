@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<< HEAD
 guid: 0bf9356cf298032408a48b3632353c49
+=======
+guid: 3fab9ef1899dc4bf18586c6a01172d62
+>>>>>>> parent of c5622ca (Revert "s")
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}

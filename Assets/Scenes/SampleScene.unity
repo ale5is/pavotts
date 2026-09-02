@@ -3245,7 +3245,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1546208112}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3551c4511c4b37348859e29275932213, type: 3}
+  m_Script: {fileID: 11500000, guid: 89c0611218214b14199dc4abf4519522, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   botrixUrl: 

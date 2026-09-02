@@ -1,7 +1,5 @@
 {
   "dependencies": {
-<<<<<<< HEAD
-=======
     "com.unity.2d.animation": {
       "version": "9.2.0",
       "depth": 1,
@@ -223,7 +221,6 @@
       },
       "url": "https://packages.unity.com"
     },
->>>>>>> parent of 16e1fed (s)
     "com.unity.modules.ai": {
       "version": "1.0.0",
       "depth": 0,

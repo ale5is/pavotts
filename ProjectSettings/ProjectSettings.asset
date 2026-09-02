@@ -4,7 +4,11 @@
 PlayerSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 26
+<<<<<<< HEAD
   productGUID: d8869fa6421ee0f4c94e2a7eead41868
+=======
+  productGUID: f3bfd8cc34789f445ac84a9e2c473306
+>>>>>>> parent of b550edc (Revert "h")
   AndroidProfiler: 0
   AndroidFilterTouchesWhenObscured: 0
   AndroidEnableSustainedPerformanceMode: 0

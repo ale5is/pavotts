@@ -13,7 +13,7 @@ public class BotrixWebView : MonoBehaviour
 
     [SerializeField]
     private string botrixUrl =
-        "https://botrix.live/widgets/chat/?bid=6PInjEti9a6JAkQK0M8FjA&bots=false&emojis=true";
+        "";
 
 
     // ==================================================

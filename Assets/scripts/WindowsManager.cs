@@ -9,17 +9,17 @@ public class WindowManager : MonoBehaviour
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
 
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLongPtr(
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+    private static extern IntPtr GetWindowLongPtr(
         IntPtr hWnd,
         int nIndex
     );
 
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLongPtr(
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+    private static extern IntPtr SetWindowLongPtr(
         IntPtr hWnd,
         int nIndex,
-        int dwNewLong
+        IntPtr dwNewLong
     );
 
     [DllImport("user32.dll")]
@@ -41,11 +41,11 @@ public class WindowManager : MonoBehaviour
 
     private const int GWL_STYLE = -16;
 
-    private const int WS_CAPTION = 0x00C00000;
-    private const int WS_THICKFRAME = 0x00040000;
-    private const int WS_MINIMIZEBOX = 0x00020000;
-    private const int WS_MAXIMIZEBOX = 0x00010000;
-    private const int WS_SYSMENU = 0x00080000;
+    private const long WS_CAPTION = 0x00C00000;
+    private const long WS_THICKFRAME = 0x00040000;
+    private const long WS_MINIMIZEBOX = 0x00020000;
+    private const long WS_MAXIMIZEBOX = 0x00010000;
+    private const long WS_SYSMENU = 0x00080000;
 
     private const int SW_RESTORE = 9;
     private const int SW_MAXIMIZE = 3;
@@ -61,42 +61,25 @@ public class WindowManager : MonoBehaviour
 #endif
 
     [Header("PRIMERA EJECUCIÓN")]
-
-    [SerializeField]
-    private int anchoInicial = 1280;
-
-    [SerializeField]
-    private int altoInicial = 720;
+    [SerializeField] private int anchoInicial = 1280;
+    [SerializeField] private int altoInicial = 720;
 
     [Header("TAMAÑO MÍNIMO")]
-
-    [SerializeField]
-    private int anchoMinimo = 800;
-
-    [SerializeField]
-    private int altoMinimo = 450;
-
+    [SerializeField] private int anchoMinimo = 800;
+    [SerializeField] private int altoMinimo = 450;
 
     private void Awake()
     {
         Application.runInBackground = true;
-
         AudioListener.pause = false;
     }
-
 
     private void Start()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-
-        Invoke(
-            nameof(ConfigurarVentana),
-            1.0f
-        );
-
+        Invoke(nameof(ConfigurarVentana), 1f);
 #endif
     }
-
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
 
@@ -105,13 +88,7 @@ public class WindowManager : MonoBehaviour
         ventana = GetActiveWindow();
 
         if (ventana == IntPtr.Zero)
-        {
             return;
-        }
-
-        // =====================================================
-        // SOLO LA PRIMERA VEZ
-        // =====================================================
 
         bool primeraVez =
             !PlayerPrefs.HasKey(
@@ -120,20 +97,21 @@ public class WindowManager : MonoBehaviour
 
         if (primeraVez)
         {
-            Screen.fullScreenMode =
-                FullScreenMode.Windowed;
-
-            Screen.fullScreen = false;
-
-            Screen.SetResolution(
+            int ancho =
                 Mathf.Max(
                     anchoInicial,
                     anchoMinimo
-                ),
+                );
+
+            int alto =
                 Mathf.Max(
                     altoInicial,
                     altoMinimo
-                ),
+                );
+
+            Screen.SetResolution(
+                ancho,
+                alto,
                 FullScreenMode.Windowed
             );
 
@@ -145,16 +123,11 @@ public class WindowManager : MonoBehaviour
             PlayerPrefs.Save();
         }
 
-
-        // =====================================================
-        // CONFIGURAR VENTANA WINDOWS
-        // =====================================================
-
-        int estilo =
+        long estilo =
             GetWindowLongPtr(
                 ventana,
                 GWL_STYLE
-            );
+            ).ToInt64();
 
         estilo |= WS_CAPTION;
         estilo |= WS_THICKFRAME;
@@ -165,13 +138,8 @@ public class WindowManager : MonoBehaviour
         SetWindowLongPtr(
             ventana,
             GWL_STYLE,
-            estilo
+            new IntPtr(estilo)
         );
-
-
-        // =====================================================
-        // ACTUALIZAR MARCO
-        // =====================================================
 
         SetWindowPos(
             ventana,
@@ -186,7 +154,6 @@ public class WindowManager : MonoBehaviour
             SWP_FRAMECHANGED
         );
 
-
         ShowWindow(
             ventana,
             SW_RESTORE
@@ -195,65 +162,39 @@ public class WindowManager : MonoBehaviour
 
 #endif
 
-
     public void Minimizar()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-
         ObtenerVentana();
 
         if (ventana != IntPtr.Zero)
-        {
-            ShowWindow(
-                ventana,
-                SW_MINIMIZE
-            );
-        }
-
+            ShowWindow(ventana, SW_MINIMIZE);
 #endif
     }
-
 
     public void Maximizar()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-
         ObtenerVentana();
 
         if (ventana != IntPtr.Zero)
-        {
-            ShowWindow(
-                ventana,
-                SW_MAXIMIZE
-            );
-        }
-
+            ShowWindow(ventana, SW_MAXIMIZE);
 #endif
     }
-
 
     public void Restaurar()
     {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-
         ObtenerVentana();
 
         if (ventana != IntPtr.Zero)
-        {
-            ShowWindow(
-                ventana,
-                SW_RESTORE
-            );
-        }
-
+            ShowWindow(ventana, SW_RESTORE);
 #endif
     }
 
-
     public void CambiarTamano(
         int ancho,
-        int alto
-    )
+        int alto)
     {
         ancho = Mathf.Max(
             ancho,
@@ -272,40 +213,25 @@ public class WindowManager : MonoBehaviour
         );
     }
 
-
     public void Tamano720p()
     {
-        CambiarTamano(
-            1280,
-            720
-        );
+        CambiarTamano(1280, 720);
     }
-
 
     public void Tamano900p()
     {
-        CambiarTamano(
-            1600,
-            900
-        );
+        CambiarTamano(1600, 900);
     }
-
 
     public void Tamano1080p()
     {
-        CambiarTamano(
-            1920,
-            1080
-        );
+        CambiarTamano(1920, 1080);
     }
-
 
     public void AlternarPantallaCompleta()
     {
-        if (
-            Screen.fullScreenMode ==
-            FullScreenMode.Windowed
-        )
+        if (Screen.fullScreenMode ==
+            FullScreenMode.Windowed)
         {
             Screen.fullScreenMode =
                 FullScreenMode.FullScreenWindow;
@@ -317,21 +243,17 @@ public class WindowManager : MonoBehaviour
         }
     }
 
-
     public void CerrarJuego()
     {
         Application.Quit();
     }
-
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
 
     private void ObtenerVentana()
     {
         if (ventana == IntPtr.Zero)
-        {
             ventana = GetActiveWindow();
-        }
     }
 
 #endif

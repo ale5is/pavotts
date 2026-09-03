@@ -4,156 +4,76 @@ using TMPro;
 
 public class BotrixChatUI : MonoBehaviour
 {
-    // ==================================================
-    // REFERENCIAS
-    // ==================================================
-
     [Header("REFERENCIAS")]
-
-    [SerializeField]
-    private BotrixWebView botrix;
-
-    [SerializeField]
-    private TMP_Text chatText;
-
-
-    // ==================================================
-    // CONFIGURACIÓN
-    // ==================================================
+    [SerializeField] private BotrixWebView botrix;
+    [SerializeField] private TMP_Text chatText;
 
     [Header("CONFIGURACIÓN")]
+    [SerializeField] private int maxMensajes = 24;
+    [SerializeField] private bool mostrarPlataforma = true;
 
-    [SerializeField]
-    private int maxMensajes = 30;
-
-    [SerializeField]
-    private bool mostrarPlataforma = true;
-
-
-    // ==================================================
-    // COLA DE MENSAJES
-    // ==================================================
-
-    private readonly Queue<string> mensajes =
-        new Queue<string>();
-
-
-    // ==================================================
-    // START
-    // ==================================================
+    private readonly Queue<string> mensajes = new Queue<string>();
 
     private void Start()
     {
         BuscarReferencias();
-
         ActualizarChat();
     }
-
-
-    // ==================================================
-    // REFERENCIAS
-    // ==================================================
-
-    private void BuscarReferencias()
-    {
-        if (botrix == null)
-        {
-            botrix =
-                FindFirstObjectByType<BotrixWebView>();
-        }
-
-        if (chatText == null)
-        {
-            Debug.LogError(
-                "❌ No se encontró ChatText"
-            );
-        }
-
-        if (botrix == null)
-        {
-            Debug.LogError(
-                "❌ No se encontró BotrixWebView"
-            );
-
-            return;
-        }
-
-        botrix.OnChatMessage -=
-            RecibirMensaje;
-
-        botrix.OnChatMessage +=
-            RecibirMensaje;
-
-
-        Debug.Log(
-            "✅ BotrixChatUI conectado"
-        );
-    }
-
-
-    // ==================================================
-    // DESTROY
-    // ==================================================
 
     private void OnDestroy()
     {
         if (botrix != null)
-        {
-            botrix.OnChatMessage -=
-                RecibirMensaje;
-        }
+            botrix.OnChatMessage -= RecibirMensaje;
     }
 
+    private void BuscarReferencias()
+    {
+        if (botrix == null)
+            botrix = FindFirstObjectByType<BotrixWebView>();
 
-    // ==================================================
-    // RECIBIR MENSAJE
-    // ==================================================
+        if (chatText == null)
+        {
+            Debug.LogError("❌ BotrixChatUI: No se encontró ChatText.");
+        }
+
+        if (botrix == null)
+        {
+            Debug.LogError("❌ BotrixChatUI: No se encontró BotrixWebView.");
+            return;
+        }
+
+        // Evita suscripciones duplicadas
+        botrix.OnChatMessage -= RecibirMensaje;
+        botrix.OnChatMessage += RecibirMensaje;
+
+        Debug.Log("✅ BotrixChatUI conectado correctamente.");
+    }
 
     private void RecibirMensaje(
         string nombre,
         string mensaje,
-        string plataforma
-    )
+        string plataforma)
     {
-        if (string.IsNullOrWhiteSpace(mensaje))
-        {
+        mensaje = LimpiarTexto(mensaje);
+        nombre = LimpiarTexto(nombre);
+        plataforma = LimpiarTexto(plataforma);
+
+        // No mostrar mensajes vacíos
+        if (string.IsNullOrEmpty(mensaje))
             return;
-        }
 
-        if (string.IsNullOrWhiteSpace(nombre))
-        {
+        if (string.IsNullOrEmpty(nombre))
             nombre = "User";
-        }
 
-        if (string.IsNullOrWhiteSpace(plataforma))
-        {
+        if (string.IsNullOrEmpty(plataforma))
             plataforma = "Chat";
-        }
-
-
-        // ==============================================
-        // LIMPIAR
-        // ==============================================
-
-        nombre =
-            LimpiarTexto(nombre);
-
-        mensaje =
-            LimpiarTexto(mensaje);
-
-
-        // ==============================================
-        // FORMATO
-        // ==============================================
 
         string linea;
 
         if (mostrarPlataforma)
         {
             linea =
-                FormatoPlataforma(
-                    plataforma
-                ) +
+                FormatoPlataforma(plataforma) +
                 " " +
                 nombre +
                 ": " +
@@ -167,123 +87,72 @@ public class BotrixChatUI : MonoBehaviour
                 mensaje;
         }
 
+        // Agregar el mensaje nuevo
+        mensajes.Enqueue(linea);
 
-        // ==============================================
-        // AGREGAR
-        // ==============================================
+        // IMPORTANTE:
+        // Mantener solamente los últimos 24 mensajes.
+        // Dequeue() elimina el mensaje MÁS ANTIGUO.
+        int limite = Mathf.Max(1, maxMensajes);
 
-        mensajes.Enqueue(
-            linea
-        );
-
-
-        // ==============================================
-        // LIMITE
-        // ==============================================
-
-        while (
-            mensajes.Count >
-            maxMensajes
-        )
+        while (mensajes.Count > limite)
         {
-            mensajes.Dequeue();
+            string mensajeEliminado = mensajes.Dequeue();
+
+            Debug.Log(
+                "🗑️ Mensaje eliminado del chat: " +
+                mensajeEliminado
+            );
         }
 
-
         ActualizarChat();
+
+        Debug.Log(
+            "💬 Mensajes actuales: " +
+            mensajes.Count +
+            "/" +
+            limite
+        );
     }
-
-
-    // ==================================================
-    // ACTUALIZAR CHAT
-    // ==================================================
 
     private void ActualizarChat()
     {
         if (chatText == null)
-        {
             return;
-        }
 
         if (mensajes.Count == 0)
         {
-            chatText.text = "";
+            chatText.text = string.Empty;
             return;
         }
 
-
-        chatText.text =
-            string.Join(
-                "\n",
-                mensajes
-            );
+        // Convertir la cola en texto.
+        // El más antiguo queda arriba.
+        chatText.text = string.Join("\n", mensajes);
     }
 
-
-    // ==================================================
-    // LIMPIAR TEXTO
-    // ==================================================
-
-    private string LimpiarTexto(
-        string texto
-    )
+    private string LimpiarTexto(string texto)
     {
         if (string.IsNullOrEmpty(texto))
-        {
-            return "";
-        }
+            return string.Empty;
 
-        texto =
-            texto
-                .Replace(
-                    "\u200B",
-                    ""
-                )
-                .Replace(
-                    "\u200C",
-                    ""
-                )
-                .Replace(
-                    "\u200D",
-                    ""
-                )
-                .Replace(
-                    "\uFEFF",
-                    ""
-                )
-                .Replace(
-                    "\r",
-                    " "
-                )
-                .Replace(
-                    "\n",
-                    " "
-                )
-                .Trim();
+        texto = texto
+            .Replace("\u200B", "")
+            .Replace("\u200C", "")
+            .Replace("\u200D", "")
+            .Replace("\uFEFF", "")
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Replace("\t", " ")
+            .Trim();
 
-
-        while (
-            texto.Contains("  ")
-        )
-        {
-            texto =
-                texto.Replace(
-                    "  ",
-                    " "
-                );
-        }
+        while (texto.Contains("  "))
+            texto = texto.Replace("  ", " ");
 
         return texto;
     }
 
-
-    // ==================================================
-    // PLATAFORMA
-    // ==================================================
-
-    private string FormatoPlataforma(
-        string plataforma
-    )
+    private string FormatoPlataforma(string plataforma)
     {
         switch (plataforma)
         {
@@ -307,19 +176,11 @@ public class BotrixChatUI : MonoBehaviour
         }
     }
 
-
-    // ==================================================
-    // LIMPIAR CHAT
-    // ==================================================
-
     public void LimpiarChat()
     {
         mensajes.Clear();
-
         ActualizarChat();
 
-        Debug.Log(
-            "🧹 Chat visual limpiado"
-        );
+        Debug.Log("🧹 Chat limpiado.");
     }
 }

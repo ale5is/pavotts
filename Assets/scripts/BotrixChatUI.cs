@@ -12,16 +12,23 @@ public class BotrixChatUI : MonoBehaviour
     [SerializeField] private int maxLineas = 24;
     [SerializeField] private bool mostrarPlataforma = true;
 
-    private readonly Queue<string> mensajes = new Queue<string>();
+    private readonly List<string> mensajes =
+        new List<string>();
 
     public int MaxLineas
     {
-        get { return Mathf.Max(1, maxLineas); }
+        get
+        {
+            return Mathf.Max(1, maxLineas);
+        }
     }
 
     public int CantidadMensajes
     {
-        get { return mensajes.Count; }
+        get
+        {
+            return mensajes.Count;
+        }
     }
 
     private void Start()
@@ -102,12 +109,7 @@ public class BotrixChatUI : MonoBehaviour
                 mensaje;
         }
 
-        // Agregar el nuevo mensaje.
-        mensajes.Enqueue(linea);
-
-        // Eliminar mensajes antiguos hasta que
-        // TODO el texto entre dentro de las 24 líneas.
-        AjustarMensajesALimite();
+        mensajes.Add(linea);
 
         ActualizarChat();
 
@@ -121,45 +123,6 @@ public class BotrixChatUI : MonoBehaviour
         );
     }
 
-    private void AjustarMensajesALimite()
-    {
-        if (chatText == null)
-            return;
-
-        if (mensajes.Count == 0)
-            return;
-
-        while (mensajes.Count > 0)
-        {
-            string textoCompleto =
-                string.Join("\n", mensajes);
-
-            // Poner temporalmente todos los mensajes
-            // en el TMP para que TextMeshPro haga
-            // exactamente el mismo wrapping que vemos
-            // en el Canvas.
-            chatText.text = textoCompleto;
-
-            chatText.ForceMeshUpdate();
-
-            int lineas = ObtenerLineasActuales();
-
-            if (lineas <= MaxLineas)
-                break;
-
-            // Se pasó del límite.
-            // Eliminar el mensaje MÁS ANTIGUO completo.
-            string eliminado = mensajes.Dequeue();
-
-            Debug.Log(
-                "🗑️ Eliminado por superar " +
-                MaxLineas +
-                " líneas: " +
-                eliminado
-            );
-        }
-    }
-
     private void ActualizarChat()
     {
         if (chatText == null)
@@ -171,16 +134,158 @@ public class BotrixChatUI : MonoBehaviour
             return;
         }
 
+        /*
+         * Volvemos a construir el texto completo.
+         *
+         * TMP se encarga de decidir cuántas
+         * líneas visuales ocupa cada mensaje.
+         */
         chatText.text =
             string.Join("\n", mensajes);
 
         chatText.ForceMeshUpdate();
+
+        /*
+         * Ahora comprobamos las líneas reales.
+         */
+        RecortarLineasExcedentes();
+
+        chatText.ForceMeshUpdate();
     }
 
-    /// <summary>
-    /// Devuelve las líneas visuales reales que
-    /// TextMeshPro está mostrando.
-    /// </summary>
+    private void RecortarLineasExcedentes()
+    {
+        if (chatText == null)
+            return;
+
+        if (string.IsNullOrEmpty(chatText.text))
+            return;
+
+        chatText.ForceMeshUpdate();
+
+        int lineasActuales =
+            chatText.textInfo.lineCount;
+
+        /*
+         * Ejemplos:
+         *
+         * 24 - 24 = 0
+         * 25 - 24 = 1
+         * 26 - 24 = 2
+         * 30 - 24 = 6
+         */
+        int lineasASobrar =
+            lineasActuales - MaxLineas;
+
+        if (lineasASobrar <= 0)
+            return;
+
+        /*
+         * Si hay que eliminar 2 líneas:
+         *
+         * lineasASobrar = 2
+         *
+         * Conservamos desde la línea índice 2.
+         *
+         * Línea 0 -> eliminar
+         * Línea 1 -> eliminar
+         * Línea 2 -> conservar
+         */
+        int lineaInicio =
+            lineasASobrar;
+
+        if (lineaInicio >= lineasActuales)
+        {
+            chatText.text = string.Empty;
+            mensajes.Clear();
+
+            return;
+        }
+
+        TMP_LineInfo infoLinea =
+            chatText.textInfo.lineInfo[
+                lineaInicio
+            ];
+
+        int indiceCharacterInfo =
+            infoLinea.firstCharacterIndex;
+
+        if (indiceCharacterInfo < 0)
+        {
+            Debug.LogWarning(
+                "⚠️ No se pudo obtener el primer carácter de la línea."
+            );
+
+            return;
+        }
+
+        if (indiceCharacterInfo >=
+            chatText.textInfo.characterCount)
+        {
+            Debug.LogWarning(
+                "⚠️ Índice de carácter fuera de rango."
+            );
+
+            return;
+        }
+
+        TMP_CharacterInfo characterInfo =
+            chatText.textInfo.characterInfo[
+                indiceCharacterInfo
+            ];
+
+        /*
+         * Este es el índice REAL dentro de
+         * chatText.text.
+         */
+        int indiceTexto =
+            characterInfo.index;
+
+        if (indiceTexto < 0 ||
+            indiceTexto >= chatText.text.Length)
+        {
+            Debug.LogWarning(
+                "⚠️ Índice de texto inválido."
+            );
+
+            return;
+        }
+
+        /*
+         * Conservamos todo desde el primer carácter
+         * de la primera línea que NO queremos eliminar.
+         */
+        string textoOriginal =
+            chatText.text;
+
+        string textoNuevo =
+            textoOriginal.Substring(
+                indiceTexto
+            );
+
+        chatText.text = textoNuevo;
+
+        chatText.ForceMeshUpdate();
+
+        /*
+         * Comprobación.
+         */
+        int lineasDespues =
+            chatText.textInfo.lineCount;
+
+        Debug.Log(
+            "✂️ Se eliminaron " +
+            lineasASobrar +
+            " líneas visuales. " +
+            "Antes: " +
+            lineasActuales +
+            " | Después: " +
+            lineasDespues +
+            "/" +
+            MaxLineas
+        );
+    }
+
     public int ObtenerLineasActuales()
     {
         if (chatText == null)
@@ -194,10 +299,6 @@ public class BotrixChatUI : MonoBehaviour
         return chatText.textInfo.lineCount;
     }
 
-    /// <summary>
-    /// Devuelve el máximo de líneas configurado.
-    /// BotrixChat utiliza este valor para la cola TTS.
-    /// </summary>
     public int ObtenerMaxLineas()
     {
         return MaxLineas;
@@ -224,24 +325,30 @@ public class BotrixChatUI : MonoBehaviour
         return texto;
     }
 
-    private string FormatoPlataforma(string plataforma)
+    private string FormatoPlataforma(
+        string plataforma)
     {
         switch (plataforma)
         {
             case "Twitch":
-                return "<color=#9146FF>[Twitch]</color>";
+                return
+                    "<color=#9146FF>[Twitch]</color>";
 
             case "YouTube":
-                return "<color=#FF0000>[YouTube]</color>";
+                return
+                    "<color=#FF0000>[YouTube]</color>";
 
             case "Kick":
-                return "<color=#53FC18>[Kick]</color>";
+                return
+                    "<color=#53FC18>[Kick]</color>";
 
             case "Discord":
-                return "<color=#5865F2>[Discord]</color>";
+                return
+                    "<color=#5865F2>[Discord]</color>";
 
             case "Minecraft":
-                return "<color=#55AA55>[Minecraft]</color>";
+                return
+                    "<color=#55AA55>[Minecraft]</color>";
 
             default:
                 return "[Chat]";
@@ -252,8 +359,11 @@ public class BotrixChatUI : MonoBehaviour
     {
         mensajes.Clear();
 
-        ActualizarChat();
+        if (chatText != null)
+            chatText.text = string.Empty;
 
-        Debug.Log("🧹 Chat limpiado.");
+        Debug.Log(
+            "🧹 Chat limpiado."
+        );
     }
 }

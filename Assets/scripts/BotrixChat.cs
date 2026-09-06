@@ -13,6 +13,8 @@ public class BotrixChat : MonoBehaviour
     [Header("CONFIGURACIÓN TTS")]
     [SerializeField] private string caracterTTS = "*";
 
+    [SerializeField] private int maxMensajesTTS = 24;
+
     private readonly Queue<string> colaTTS =
         new Queue<string>();
 
@@ -44,13 +46,16 @@ public class BotrixChat : MonoBehaviour
     private void BuscarReferencias()
     {
         if (botrix == null)
-            botrix = FindFirstObjectByType<BotrixWebView>();
+            botrix =
+                FindFirstObjectByType<BotrixWebView>();
 
         if (tts == null)
-            tts = FindFirstObjectByType<UnityTTS>();
+            tts =
+                FindFirstObjectByType<UnityTTS>();
 
         if (chatUI == null)
-            chatUI = FindFirstObjectByType<BotrixChatUI>();
+            chatUI =
+                FindFirstObjectByType<BotrixChatUI>();
 
         if (botrix == null)
         {
@@ -73,8 +78,7 @@ public class BotrixChat : MonoBehaviour
         if (chatUI == null)
         {
             Debug.LogWarning(
-                "⚠️ No se encontró BotrixChatUI. " +
-                "Se utilizará 24 como límite."
+                "⚠️ No se encontró BotrixChatUI."
             );
         }
 
@@ -92,7 +96,8 @@ public class BotrixChat : MonoBehaviour
         );
     }
 
-    public void Configurar(string nuevoCaracter)
+    public void Configurar(
+        string nuevoCaracter)
     {
         if (string.IsNullOrWhiteSpace(nuevoCaracter))
             nuevoCaracter = "*";
@@ -112,7 +117,8 @@ public class BotrixChat : MonoBehaviour
         string mensaje,
         string plataforma)
     {
-        mensaje = LimpiarMensaje(mensaje);
+        mensaje =
+            LimpiarMensaje(mensaje);
 
         if (string.IsNullOrEmpty(mensaje))
             return;
@@ -129,8 +135,11 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(caracterTTS))
             caracterTTS = "*";
 
-        // Solo mensajes que comienzan con *
-        // son enviados al TTS.
+        /*
+         * Solo mensajes que comienzan
+         * con el carácter configurado
+         * entran al TTS.
+         */
         if (!mensaje.StartsWith(
                 caracterTTS,
                 StringComparison.Ordinal))
@@ -140,12 +149,17 @@ public class BotrixChat : MonoBehaviour
 
         string texto =
             mensaje
-                .Substring(caracterTTS.Length)
+                .Substring(
+                    caracterTTS.Length
+                )
                 .Trim();
 
         if (string.IsNullOrEmpty(texto))
             return;
 
+        /*
+         * Evitar mensajes duplicados.
+         */
         string id =
             nombre +
             "|" +
@@ -159,6 +173,7 @@ public class BotrixChat : MonoBehaviour
         if (mensajesProcesados.Count > 1000)
         {
             mensajesProcesados.Clear();
+
             mensajesProcesados.Add(id);
         }
 
@@ -173,25 +188,23 @@ public class BotrixChat : MonoBehaviour
             " dice: " +
             texto;
 
-        // Obtener el mismo límite configurado
-        // para las líneas del Canvas.
-        int limiteTTS = 24;
-
-        if (chatUI != null)
-        {
-            limiteTTS =
-                chatUI.ObtenerMaxLineas();
-        }
-
-        limiteTTS =
+        /*
+         * La cola TTS tiene su propio límite.
+         *
+         * Esto no modifica el límite visual
+         * del Canvas.
+         */
+        int limite =
             Mathf.Max(
                 1,
-                limiteTTS
+                maxMensajesTTS
             );
 
-        // Mantener como máximo el mismo número
-        // de entradas que el límite del Canvas.
-        while (colaTTS.Count >= limiteTTS)
+        /*
+         * Si la cola está llena,
+         * eliminar los TTS más antiguos.
+         */
+        while (colaTTS.Count >= limite)
         {
             string eliminado =
                 colaTTS.Dequeue();
@@ -208,7 +221,7 @@ public class BotrixChat : MonoBehaviour
             "🎤 TTS en cola: " +
             colaTTS.Count +
             "/" +
-            limiteTTS
+            limite
         );
 
         HablarSiguiente();
@@ -353,8 +366,10 @@ public class BotrixChat : MonoBehaviour
         }
 
         if (nombre.StartsWith("@"))
+        {
             nombre =
                 nombre.Substring(1);
+        }
 
         return EspaciosRegex
             .Replace(nombre, " ")

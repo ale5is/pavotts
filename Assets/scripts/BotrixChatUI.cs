@@ -9,10 +9,20 @@ public class BotrixChatUI : MonoBehaviour
     [SerializeField] private TMP_Text chatText;
 
     [Header("CONFIGURACIÓN")]
-    [SerializeField] private int maxMensajes = 24;
+    [SerializeField] private int maxLineas = 24;
     [SerializeField] private bool mostrarPlataforma = true;
 
     private readonly Queue<string> mensajes = new Queue<string>();
+
+    public int MaxLineas
+    {
+        get { return Mathf.Max(1, maxLineas); }
+    }
+
+    public int CantidadMensajes
+    {
+        get { return mensajes.Count; }
+    }
 
     private void Start()
     {
@@ -33,20 +43,26 @@ public class BotrixChatUI : MonoBehaviour
 
         if (chatText == null)
         {
-            Debug.LogError("❌ BotrixChatUI: No se encontró ChatText.");
+            Debug.LogError(
+                "❌ BotrixChatUI: No se encontró ChatText."
+            );
         }
 
         if (botrix == null)
         {
-            Debug.LogError("❌ BotrixChatUI: No se encontró BotrixWebView.");
+            Debug.LogError(
+                "❌ BotrixChatUI: No se encontró BotrixWebView."
+            );
+
             return;
         }
 
-        // Evita suscripciones duplicadas
         botrix.OnChatMessage -= RecibirMensaje;
         botrix.OnChatMessage += RecibirMensaje;
 
-        Debug.Log("✅ BotrixChatUI conectado correctamente.");
+        Debug.Log(
+            "✅ BotrixChatUI conectado correctamente."
+        );
     }
 
     private void RecibirMensaje(
@@ -58,7 +74,6 @@ public class BotrixChatUI : MonoBehaviour
         nombre = LimpiarTexto(nombre);
         plataforma = LimpiarTexto(plataforma);
 
-        // No mostrar mensajes vacíos
         if (string.IsNullOrEmpty(mensaje))
             return;
 
@@ -87,32 +102,62 @@ public class BotrixChatUI : MonoBehaviour
                 mensaje;
         }
 
-        // Agregar el mensaje nuevo
+        // Agregar el nuevo mensaje.
         mensajes.Enqueue(linea);
 
-        // IMPORTANTE:
-        // Mantener solamente los últimos 24 mensajes.
-        // Dequeue() elimina el mensaje MÁS ANTIGUO.
-        int limite = Mathf.Max(1, maxMensajes);
-
-        while (mensajes.Count > limite)
-        {
-            string mensajeEliminado = mensajes.Dequeue();
-
-            Debug.Log(
-                "🗑️ Mensaje eliminado del chat: " +
-                mensajeEliminado
-            );
-        }
+        // Eliminar mensajes antiguos hasta que
+        // TODO el texto entre dentro de las 24 líneas.
+        AjustarMensajesALimite();
 
         ActualizarChat();
 
         Debug.Log(
-            "💬 Mensajes actuales: " +
-            mensajes.Count +
+            "💬 Líneas actuales: " +
+            ObtenerLineasActuales() +
             "/" +
-            limite
+            MaxLineas +
+            " | Mensajes: " +
+            mensajes.Count
         );
+    }
+
+    private void AjustarMensajesALimite()
+    {
+        if (chatText == null)
+            return;
+
+        if (mensajes.Count == 0)
+            return;
+
+        while (mensajes.Count > 0)
+        {
+            string textoCompleto =
+                string.Join("\n", mensajes);
+
+            // Poner temporalmente todos los mensajes
+            // en el TMP para que TextMeshPro haga
+            // exactamente el mismo wrapping que vemos
+            // en el Canvas.
+            chatText.text = textoCompleto;
+
+            chatText.ForceMeshUpdate();
+
+            int lineas = ObtenerLineasActuales();
+
+            if (lineas <= MaxLineas)
+                break;
+
+            // Se pasó del límite.
+            // Eliminar el mensaje MÁS ANTIGUO completo.
+            string eliminado = mensajes.Dequeue();
+
+            Debug.Log(
+                "🗑️ Eliminado por superar " +
+                MaxLineas +
+                " líneas: " +
+                eliminado
+            );
+        }
     }
 
     private void ActualizarChat()
@@ -126,9 +171,36 @@ public class BotrixChatUI : MonoBehaviour
             return;
         }
 
-        // Convertir la cola en texto.
-        // El más antiguo queda arriba.
-        chatText.text = string.Join("\n", mensajes);
+        chatText.text =
+            string.Join("\n", mensajes);
+
+        chatText.ForceMeshUpdate();
+    }
+
+    /// <summary>
+    /// Devuelve las líneas visuales reales que
+    /// TextMeshPro está mostrando.
+    /// </summary>
+    public int ObtenerLineasActuales()
+    {
+        if (chatText == null)
+            return 0;
+
+        if (string.IsNullOrEmpty(chatText.text))
+            return 0;
+
+        chatText.ForceMeshUpdate();
+
+        return chatText.textInfo.lineCount;
+    }
+
+    /// <summary>
+    /// Devuelve el máximo de líneas configurado.
+    /// BotrixChat utiliza este valor para la cola TTS.
+    /// </summary>
+    public int ObtenerMaxLineas()
+    {
+        return MaxLineas;
     }
 
     private string LimpiarTexto(string texto)
@@ -179,6 +251,7 @@ public class BotrixChatUI : MonoBehaviour
     public void LimpiarChat()
     {
         mensajes.Clear();
+
         ActualizarChat();
 
         Debug.Log("🧹 Chat limpiado.");

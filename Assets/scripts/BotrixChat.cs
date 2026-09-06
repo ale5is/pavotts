@@ -8,18 +8,24 @@ public class BotrixChat : MonoBehaviour
     [Header("REFERENCIAS")]
     [SerializeField] private BotrixWebView botrix;
     [SerializeField] private UnityTTS tts;
+    [SerializeField] private BotrixChatUI chatUI;
 
     [Header("CONFIGURACIÓN TTS")]
     [SerializeField] private string caracterTTS = "*";
-    [SerializeField] private int maxMensajesCola = 20;
 
-    private readonly Queue<string> colaTTS = new Queue<string>();
-    private readonly HashSet<string> mensajesProcesados = new HashSet<string>();
+    private readonly Queue<string> colaTTS =
+        new Queue<string>();
+
+    private readonly HashSet<string> mensajesProcesados =
+        new HashSet<string>();
 
     private bool hablando;
 
     private static readonly Regex EspaciosRegex =
-        new Regex(@"\s+", RegexOptions.Compiled);
+        new Regex(
+            @"\s+",
+            RegexOptions.Compiled
+        );
 
     private void Start()
     {
@@ -43,16 +49,33 @@ public class BotrixChat : MonoBehaviour
         if (tts == null)
             tts = FindFirstObjectByType<UnityTTS>();
 
+        if (chatUI == null)
+            chatUI = FindFirstObjectByType<BotrixChatUI>();
+
         if (botrix == null)
         {
-            Debug.LogError("❌ No se encontró BotrixWebView.");
+            Debug.LogError(
+                "❌ No se encontró BotrixWebView."
+            );
+
             return;
         }
 
         if (tts == null)
         {
-            Debug.LogError("❌ No se encontró UnityTTS.");
+            Debug.LogError(
+                "❌ No se encontró UnityTTS."
+            );
+
             return;
+        }
+
+        if (chatUI == null)
+        {
+            Debug.LogWarning(
+                "⚠️ No se encontró BotrixChatUI. " +
+                "Se utilizará 24 como límite."
+            );
         }
 
         if (string.IsNullOrWhiteSpace(caracterTTS))
@@ -64,7 +87,9 @@ public class BotrixChat : MonoBehaviour
         tts.OnFinished -= TTSFinalizado;
         tts.OnFinished += TTSFinalizado;
 
-        Debug.Log("✅ BotrixChat conectado.");
+        Debug.Log(
+            "✅ BotrixChat conectado."
+        );
     }
 
     public void Configurar(string nuevoCaracter)
@@ -72,9 +97,14 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrWhiteSpace(nuevoCaracter))
             nuevoCaracter = "*";
 
-        caracterTTS = nuevoCaracter.Trim();
+        caracterTTS =
+            nuevoCaracter.Trim();
 
-        Debug.Log("🎤 Carácter TTS: [" + caracterTTS + "]");
+        Debug.Log(
+            "🎤 Carácter TTS: [" +
+            caracterTTS +
+            "]"
+        );
     }
 
     private void ProcesarMensaje(
@@ -87,7 +117,11 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(mensaje))
             return;
 
-        nombre = LimpiarNombre(nombre, mensaje);
+        nombre =
+            LimpiarNombre(
+                nombre,
+                mensaje
+            );
 
         if (string.IsNullOrEmpty(nombre))
             nombre = "User";
@@ -95,6 +129,8 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(caracterTTS))
             caracterTTS = "*";
 
+        // Solo mensajes que comienzan con *
+        // son enviados al TTS.
         if (!mensaje.StartsWith(
                 caracterTTS,
                 StringComparison.Ordinal))
@@ -102,16 +138,19 @@ public class BotrixChat : MonoBehaviour
             return;
         }
 
-        string texto = mensaje
-            .Substring(caracterTTS.Length)
-            .Trim();
+        string texto =
+            mensaje
+                .Substring(caracterTTS.Length)
+                .Trim();
 
         if (string.IsNullOrEmpty(texto))
             return;
 
         string id =
-            nombre + "|" +
-            mensaje + "|" +
+            nombre +
+            "|" +
+            mensaje +
+            "|" +
             plataforma;
 
         if (!mensajesProcesados.Add(id))
@@ -123,29 +162,71 @@ public class BotrixChat : MonoBehaviour
             mensajesProcesados.Add(id);
         }
 
-        nombre = PrepararNombreTTS(nombre);
-        texto = CorregirPronunciacion(texto);
+        nombre =
+            PrepararNombreTTS(nombre);
+
+        texto =
+            CorregirPronunciacion(texto);
 
         string textoTTS =
-            nombre + " dice: " + texto;
+            nombre +
+            " dice: " +
+            texto;
 
-        if (maxMensajesCola <= 0)
-            return;
+        // Obtener el mismo límite configurado
+        // para las líneas del Canvas.
+        int limiteTTS = 24;
 
-        while (colaTTS.Count >= maxMensajesCola)
-            colaTTS.Dequeue();
+        if (chatUI != null)
+        {
+            limiteTTS =
+                chatUI.ObtenerMaxLineas();
+        }
+
+        limiteTTS =
+            Mathf.Max(
+                1,
+                limiteTTS
+            );
+
+        // Mantener como máximo el mismo número
+        // de entradas que el límite del Canvas.
+        while (colaTTS.Count >= limiteTTS)
+        {
+            string eliminado =
+                colaTTS.Dequeue();
+
+            Debug.Log(
+                "🗑️ TTS eliminado de la cola: " +
+                eliminado
+            );
+        }
 
         colaTTS.Enqueue(textoTTS);
+
+        Debug.Log(
+            "🎤 TTS en cola: " +
+            colaTTS.Count +
+            "/" +
+            limiteTTS
+        );
 
         HablarSiguiente();
     }
 
     private void HablarSiguiente()
     {
-        if (hablando || tts == null || colaTTS.Count == 0)
+        if (hablando)
             return;
 
-        string texto = colaTTS.Dequeue();
+        if (tts == null)
+            return;
+
+        if (colaTTS.Count == 0)
+            return;
+
+        string texto =
+            colaTTS.Dequeue();
 
         if (string.IsNullOrEmpty(texto))
         {
@@ -154,64 +235,91 @@ public class BotrixChat : MonoBehaviour
         }
 
         hablando = true;
+
         tts.Speak(texto);
     }
 
     private void TTSFinalizado()
     {
         hablando = false;
+
         HablarSiguiente();
     }
 
     public void LimpiarCola()
     {
         colaTTS.Clear();
+
+        Debug.Log(
+            "🧹 Cola TTS limpiada."
+        );
     }
 
     public void StopTTS()
     {
         colaTTS.Clear();
+
         hablando = false;
 
         if (tts != null)
             tts.Stop();
+
+        Debug.Log(
+            "🛑 TTS detenido."
+        );
     }
 
-    public void CambiarCaracterTTS(string nuevoCaracter)
+    public void CambiarCaracterTTS(
+        string nuevoCaracter)
     {
         if (string.IsNullOrWhiteSpace(nuevoCaracter))
             return;
 
-        caracterTTS = nuevoCaracter.Trim();
+        caracterTTS =
+            nuevoCaracter.Trim();
+
+        Debug.Log(
+            "🎤 Nuevo carácter TTS: [" +
+            caracterTTS +
+            "]"
+        );
     }
 
-    private string PrepararNombreTTS(string nombre)
+    private string PrepararNombreTTS(
+        string nombre)
     {
         if (string.IsNullOrWhiteSpace(nombre))
             return "User";
 
-        nombre = nombre
-            .Replace("_", " ")
-            .Replace("@", " arroba ");
+        nombre =
+            nombre
+                .Replace("_", " ")
+                .Replace("@", " arroba ");
 
-        return EspaciosRegex.Replace(nombre, " ").Trim();
+        return EspaciosRegex
+            .Replace(nombre, " ")
+            .Trim();
     }
 
-    private string LimpiarMensaje(string mensaje)
+    private string LimpiarMensaje(
+        string mensaje)
     {
         if (string.IsNullOrEmpty(mensaje))
             return string.Empty;
 
-        mensaje = mensaje
-            .Replace("\u200B", "")
-            .Replace("\u200C", "")
-            .Replace("\u200D", "")
-            .Replace("\uFEFF", "")
-            .Replace("\r", " ")
-            .Replace("\n", " ")
-            .Replace("\t", " ");
+        mensaje =
+            mensaje
+                .Replace("\u200B", "")
+                .Replace("\u200C", "")
+                .Replace("\u200D", "")
+                .Replace("\uFEFF", "")
+                .Replace("\r", " ")
+                .Replace("\n", " ")
+                .Replace("\t", " ");
 
-        return EspaciosRegex.Replace(mensaje, " ").Trim();
+        return EspaciosRegex
+            .Replace(mensaje, " ")
+            .Trim();
     }
 
     private string LimpiarNombre(
@@ -221,59 +329,86 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrWhiteSpace(nombre))
             return "User";
 
-        nombre = nombre.Trim();
-        mensaje = mensaje != null ? mensaje.Trim() : "";
+        nombre =
+            nombre.Trim();
+
+        mensaje =
+            mensaje != null
+                ? mensaje.Trim()
+                : "";
 
         if (!string.IsNullOrEmpty(mensaje) &&
-            nombre.EndsWith(mensaje, StringComparison.Ordinal))
+            nombre.EndsWith(
+                mensaje,
+                StringComparison.Ordinal))
         {
-            nombre = nombre
-                .Substring(0, nombre.Length - mensaje.Length)
-                .Trim();
+            nombre =
+                nombre
+                    .Substring(
+                        0,
+                        nombre.Length -
+                        mensaje.Length
+                    )
+                    .Trim();
         }
 
         if (nombre.StartsWith("@"))
-            nombre = nombre.Substring(1);
+            nombre =
+                nombre.Substring(1);
 
-        return EspaciosRegex.Replace(nombre, " ").Trim();
+        return EspaciosRegex
+            .Replace(nombre, " ")
+            .Trim();
     }
 
-    private string CorregirPronunciacion(string texto)
+    private string CorregirPronunciacion(
+        string texto)
     {
         if (string.IsNullOrEmpty(texto))
             return string.Empty;
 
-        texto = texto
-            .Replace("@", " arroba ")
-            .Replace("#", " almohadilla ")
-            .Replace("$", " dólar ")
-            .Replace("%", " por ciento ")
-            .Replace("_", " ");
+        texto =
+            texto
+                .Replace("@", " arroba ")
+                .Replace("#", " almohadilla ")
+                .Replace("$", " dólar ")
+                .Replace("%", " por ciento ")
+                .Replace("_", " ");
 
-        texto = Regex.Replace(
-            texto,
-            @"\bRoblox\b",
-            "Ró-bloks",
-            RegexOptions.IgnoreCase);
+        texto =
+            Regex.Replace(
+                texto,
+                @"\bRoblox\b",
+                "Ró-bloks",
+                RegexOptions.IgnoreCase
+            );
 
-        texto = Regex.Replace(
-            texto,
-            @"\bMinecraft\b",
-            "Máin-cráft",
-            RegexOptions.IgnoreCase);
+        texto =
+            Regex.Replace(
+                texto,
+                @"\bMinecraft\b",
+                "Máin-cráft",
+                RegexOptions.IgnoreCase
+            );
 
-        texto = Regex.Replace(
-            texto,
-            @"\bDiscord\b",
-            "Dis-córd",
-            RegexOptions.IgnoreCase);
+        texto =
+            Regex.Replace(
+                texto,
+                @"\bDiscord\b",
+                "Dis-córd",
+                RegexOptions.IgnoreCase
+            );
 
-        texto = Regex.Replace(
-            texto,
-            @"\bYouTube\b",
-            "Yutub",
-            RegexOptions.IgnoreCase);
+        texto =
+            Regex.Replace(
+                texto,
+                @"\bYouTube\b",
+                "Yutub",
+                RegexOptions.IgnoreCase
+            );
 
-        return EspaciosRegex.Replace(texto, " ").Trim();
+        return EspaciosRegex
+            .Replace(texto, " ")
+            .Trim();
     }
 }

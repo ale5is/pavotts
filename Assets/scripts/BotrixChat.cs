@@ -11,6 +11,7 @@ public class BotrixChat : MonoBehaviour
     [SerializeField] private BotrixChatUI chatUI;
 
     [Header("CONFIGURACIÓN TTS")]
+    [Tooltip("Dejar vacío para leer TODOS los mensajes.")]
     [SerializeField] private string caracterTTS = "*";
 
     [SerializeField] private int maxMensajesTTS = 24;
@@ -82,8 +83,18 @@ public class BotrixChat : MonoBehaviour
             );
         }
 
-        if (string.IsNullOrWhiteSpace(caracterTTS))
-            caracterTTS = "*";
+        /*
+         * IMPORTANTE:
+         *
+         * NO ponemos "*" automáticamente si está vacío.
+         *
+         * Vacío = leer todos los mensajes.
+         */
+        if (caracterTTS == null)
+            caracterTTS = "";
+
+        caracterTTS =
+            caracterTTS.Trim();
 
         botrix.OnChatMessage -= ProcesarMensaje;
         botrix.OnChatMessage += ProcesarMensaje;
@@ -91,25 +102,51 @@ public class BotrixChat : MonoBehaviour
         tts.OnFinished -= TTSFinalizado;
         tts.OnFinished += TTSFinalizado;
 
-        Debug.Log(
-            "✅ BotrixChat conectado."
-        );
+        if (string.IsNullOrEmpty(caracterTTS))
+        {
+            Debug.Log(
+                "🎤 TTS conectado: LEERÁ TODOS LOS MENSAJES."
+            );
+        }
+        else
+        {
+            Debug.Log(
+                "🎤 TTS conectado. " +
+                "Carácter requerido: [" +
+                caracterTTS +
+                "]"
+            );
+        }
     }
 
     public void Configurar(
         string nuevoCaracter)
     {
-        if (string.IsNullOrWhiteSpace(nuevoCaracter))
-            nuevoCaracter = "*";
+        /*
+         * Si recibe null o vacío,
+         * significa que no hay carácter requerido.
+         */
+        if (nuevoCaracter == null)
+            nuevoCaracter = "";
 
         caracterTTS =
             nuevoCaracter.Trim();
 
-        Debug.Log(
-            "🎤 Carácter TTS: [" +
-            caracterTTS +
-            "]"
-        );
+        if (string.IsNullOrEmpty(caracterTTS))
+        {
+            Debug.Log(
+                "🎤 Carácter TTS vacío: " +
+                "ahora se leerán TODOS los mensajes."
+            );
+        }
+        else
+        {
+            Debug.Log(
+                "🎤 Carácter TTS: [" +
+                caracterTTS +
+                "]"
+            );
+        }
     }
 
     private void ProcesarMensaje(
@@ -132,27 +169,73 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(nombre))
             nombre = "User";
 
-        if (string.IsNullOrEmpty(caracterTTS))
-            caracterTTS = "*";
-
         /*
-         * Solo mensajes que comienzan
-         * con el carácter configurado
-         * entran al TTS.
+         * ==================================================
+         * DETERMINAR SI EL MENSAJE SE LEE
+         * ==================================================
+         *
+         * caracterTTS vacío:
+         *
+         *     Lee TODOS los mensajes.
+         *
+         * caracterTTS = "*":
+         *
+         *     Solo lee:
+         *
+         *     * hola
+         *
+         * caracterTTS = "!":
+         *
+         *     Solo lee:
+         *
+         *     ! hola
          */
-        if (!mensaje.StartsWith(
-                caracterTTS,
-                StringComparison.Ordinal))
-        {
-            return;
-        }
 
-        string texto =
-            mensaje
-                .Substring(
-                    caracterTTS.Length
-                )
-                .Trim();
+        string texto;
+
+        if (string.IsNullOrEmpty(caracterTTS))
+        {
+            /*
+             * NO HAY CARÁCTER.
+             *
+             * Se utiliza el mensaje completo.
+             */
+            texto = mensaje;
+        }
+        else
+        {
+            /*
+             * HAY CARÁCTER.
+             *
+             * Solo aceptar mensajes que
+             * comiencen con ese carácter.
+             */
+            if (!mensaje.StartsWith(
+                    caracterTTS,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            /*
+             * Quitar el carácter antes
+             * de mandarlo al TTS.
+             *
+             * Ejemplo:
+             *
+             * * hola
+             *
+             * se convierte en:
+             *
+             * hola
+             */
+            texto =
+                mensaje
+                    .Substring(
+                        caracterTTS.Length
+                    )
+                    .Trim();
+        }
 
         if (string.IsNullOrEmpty(texto))
             return;
@@ -189,10 +272,7 @@ public class BotrixChat : MonoBehaviour
             texto;
 
         /*
-         * La cola TTS tiene su propio límite.
-         *
-         * Esto no modifica el límite visual
-         * del Canvas.
+         * Límite de la cola TTS.
          */
         int limite =
             Mathf.Max(
@@ -202,7 +282,7 @@ public class BotrixChat : MonoBehaviour
 
         /*
          * Si la cola está llena,
-         * eliminar los TTS más antiguos.
+         * sacar los mensajes más antiguos.
          */
         while (colaTTS.Count >= limite)
         {
@@ -221,7 +301,9 @@ public class BotrixChat : MonoBehaviour
             "🎤 TTS en cola: " +
             colaTTS.Count +
             "/" +
-            limite
+            limite +
+            " | " +
+            textoTTS
         );
 
         HablarSiguiente();
@@ -285,17 +367,27 @@ public class BotrixChat : MonoBehaviour
     public void CambiarCaracterTTS(
         string nuevoCaracter)
     {
-        if (string.IsNullOrWhiteSpace(nuevoCaracter))
-            return;
+        if (nuevoCaracter == null)
+            nuevoCaracter = "";
 
         caracterTTS =
             nuevoCaracter.Trim();
 
-        Debug.Log(
-            "🎤 Nuevo carácter TTS: [" +
-            caracterTTS +
-            "]"
-        );
+        if (string.IsNullOrEmpty(caracterTTS))
+        {
+            Debug.Log(
+                "🎤 Carácter TTS vacío. " +
+                "Se leerán TODOS los mensajes."
+            );
+        }
+        else
+        {
+            Debug.Log(
+                "🎤 Nuevo carácter TTS: [" +
+                caracterTTS +
+                "]"
+            );
+        }
     }
 
     private string PrepararNombreTTS(

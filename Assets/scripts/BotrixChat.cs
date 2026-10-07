@@ -16,6 +16,11 @@ public class BotrixChat : MonoBehaviour
 
     [SerializeField] private int maxMensajesTTS = 24;
 
+    [Header("BLACKLIST")]
+    [SerializeField]
+    private List<string> blacklist =
+        new List<string>();
+
     private readonly Queue<string> colaTTS =
         new Queue<string>();
 
@@ -83,18 +88,19 @@ public class BotrixChat : MonoBehaviour
             );
         }
 
-        /*
-         * IMPORTANTE:
-         *
-         * NO ponemos "*" automáticamente si está vacío.
-         *
-         * Vacío = leer todos los mensajes.
-         */
         if (caracterTTS == null)
             caracterTTS = "";
 
         caracterTTS =
             caracterTTS.Trim();
+
+        if (blacklist == null)
+        {
+            blacklist =
+                new List<string>();
+        }
+
+        NormalizarBlacklist();
 
         botrix.OnChatMessage -= ProcesarMensaje;
         botrix.OnChatMessage += ProcesarMensaje;
@@ -117,15 +123,17 @@ public class BotrixChat : MonoBehaviour
                 "]"
             );
         }
+
+        Debug.Log(
+            "🚫 Blacklist activa: " +
+            blacklist.Count +
+            " usuario(s)."
+        );
     }
 
     public void Configurar(
         string nuevoCaracter)
     {
-        /*
-         * Si recibe null o vacío,
-         * significa que no hay carácter requerido.
-         */
         if (nuevoCaracter == null)
             nuevoCaracter = "";
 
@@ -145,6 +153,196 @@ public class BotrixChat : MonoBehaviour
                 "🎤 Carácter TTS: [" +
                 caracterTTS +
                 "]"
+            );
+        }
+    }
+
+    public void ConfigurarBlacklist(
+        List<string> nuevaBlacklist)
+    {
+        if (blacklist == null)
+        {
+            blacklist =
+                new List<string>();
+        }
+
+        blacklist.Clear();
+
+        if (nuevaBlacklist != null)
+        {
+            foreach (string nombre in nuevaBlacklist)
+            {
+                AgregarBlacklistInterna(
+                    nombre
+                );
+            }
+        }
+
+        Debug.Log(
+            "🚫 Blacklist configurada: " +
+            blacklist.Count +
+            " usuario(s)."
+        );
+    }
+
+    public void AgregarBlacklist(
+        string nombre)
+    {
+        if (AgregarBlacklistInterna(nombre))
+        {
+            Debug.Log(
+                "🚫 Usuario agregado a blacklist: " +
+                LimpiarNombreBlacklist(nombre)
+            );
+        }
+    }
+
+    private bool AgregarBlacklistInterna(
+        string nombre)
+    {
+        string limpio =
+            LimpiarNombreBlacklist(nombre);
+
+        if (string.IsNullOrWhiteSpace(limpio))
+            return false;
+
+        if (blacklist == null)
+        {
+            blacklist =
+                new List<string>();
+        }
+
+        if (EstaEnBlacklist(limpio))
+            return false;
+
+        blacklist.Add(
+            limpio
+        );
+
+        return true;
+    }
+
+    public void QuitarBlacklist(
+        string nombre)
+    {
+        if (blacklist == null)
+        {
+            blacklist =
+                new List<string>();
+
+            return;
+        }
+
+        string limpio =
+            LimpiarNombreBlacklist(nombre);
+
+        if (string.IsNullOrWhiteSpace(limpio))
+            return;
+
+        int cantidadEliminada =
+            blacklist.RemoveAll(
+                x => string.Equals(
+                    x,
+                    limpio,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+
+        if (cantidadEliminada > 0)
+        {
+            Debug.Log(
+                "✅ Usuario eliminado de blacklist: " +
+                limpio
+            );
+        }
+    }
+
+    public void LimpiarBlacklist()
+    {
+        if (blacklist == null)
+        {
+            blacklist =
+                new List<string>();
+
+            return;
+        }
+
+        blacklist.Clear();
+
+        Debug.Log(
+            "🧹 Blacklist de BotrixChat limpiada."
+        );
+    }
+
+    public bool EstaEnBlacklist(
+        string nombre)
+    {
+        if (blacklist == null ||
+            blacklist.Count == 0)
+        {
+            return false;
+        }
+
+        string limpio =
+            LimpiarNombreBlacklist(nombre);
+
+        if (string.IsNullOrWhiteSpace(limpio))
+            return false;
+
+        return blacklist.Exists(
+            x => string.Equals(
+                x,
+                limpio,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+    }
+
+    private string LimpiarNombreBlacklist(
+        string nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre))
+            return "";
+
+        string limpio =
+            nombre.Trim();
+
+        while (limpio.StartsWith("@"))
+        {
+            limpio =
+                limpio.Substring(1);
+        }
+
+        limpio =
+            EspaciosRegex.Replace(
+                limpio,
+                " "
+            );
+
+        return limpio.Trim();
+    }
+
+    private void NormalizarBlacklist()
+    {
+        if (blacklist == null)
+        {
+            blacklist =
+                new List<string>();
+
+            return;
+        }
+
+        List<string> original =
+            new List<string>(
+                blacklist
+            );
+
+        blacklist.Clear();
+
+        foreach (string nombre in original)
+        {
+            AgregarBlacklistInterna(
+                nombre
             );
         }
     }
@@ -169,47 +367,24 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(nombre))
             nombre = "User";
 
-        /*
-         * ==================================================
-         * DETERMINAR SI EL MENSAJE SE LEE
-         * ==================================================
-         *
-         * caracterTTS vacío:
-         *
-         *     Lee TODOS los mensajes.
-         *
-         * caracterTTS = "*":
-         *
-         *     Solo lee:
-         *
-         *     * hola
-         *
-         * caracterTTS = "!":
-         *
-         *     Solo lee:
-         *
-         *     ! hola
-         */
+        if (EstaEnBlacklist(nombre))
+        {
+            Debug.Log(
+                "🚫 Mensaje ignorado por blacklist: " +
+                nombre
+            );
+
+            return;
+        }
 
         string texto;
 
         if (string.IsNullOrEmpty(caracterTTS))
         {
-            /*
-             * NO HAY CARÁCTER.
-             *
-             * Se utiliza el mensaje completo.
-             */
             texto = mensaje;
         }
         else
         {
-            /*
-             * HAY CARÁCTER.
-             *
-             * Solo aceptar mensajes que
-             * comiencen con ese carácter.
-             */
             if (!mensaje.StartsWith(
                     caracterTTS,
                     StringComparison.Ordinal))
@@ -217,18 +392,6 @@ public class BotrixChat : MonoBehaviour
                 return;
             }
 
-            /*
-             * Quitar el carácter antes
-             * de mandarlo al TTS.
-             *
-             * Ejemplo:
-             *
-             * * hola
-             *
-             * se convierte en:
-             *
-             * hola
-             */
             texto =
                 mensaje
                     .Substring(
@@ -240,9 +403,6 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(texto))
             return;
 
-        /*
-         * Evitar mensajes duplicados.
-         */
         string id =
             nombre +
             "|" +
@@ -271,19 +431,12 @@ public class BotrixChat : MonoBehaviour
             " dice: " +
             texto;
 
-        /*
-         * Límite de la cola TTS.
-         */
         int limite =
             Mathf.Max(
                 1,
                 maxMensajesTTS
             );
 
-        /*
-         * Si la cola está llena,
-         * sacar los mensajes más antiguos.
-         */
         while (colaTTS.Count >= limite)
         {
             string eliminado =
@@ -326,10 +479,16 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(texto))
         {
             HablarSiguiente();
+
             return;
         }
 
         hablando = true;
+
+        Debug.Log(
+            "🔊 TTS reproduciendo: " +
+            texto
+        );
 
         tts.Speak(texto);
     }
@@ -344,6 +503,8 @@ public class BotrixChat : MonoBehaviour
     public void LimpiarCola()
     {
         colaTTS.Clear();
+
+        hablando = false;
 
         Debug.Log(
             "🧹 Cola TTS limpiada."

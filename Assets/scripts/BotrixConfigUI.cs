@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
@@ -24,28 +25,25 @@ public class BotrixConfigUI : MonoBehaviour
     [SerializeField] private Slider volumenSlider;
     [SerializeField] private TMP_Text textoVolumen;
 
+    [Header("BLACKLIST")]
+    [SerializeField] private TMP_InputField blacklistInput;
+    [SerializeField] private TMP_Text blacklistTexto;
+
     [Header("ESTADO")]
     [SerializeField] private TMP_Text textoEstado;
 
     private const string URL_DEFAULT = "";
     private const string VOZ_DEFAULT = "es_002";
-
-    /*
-     * VACÍO = LEER TODOS LOS MENSAJES
-     *
-     * Si querés que solo lea mensajes con *,
-     * escribí * en el campo.
-     */
     private const string CARACTER_DEFAULT = "";
+
+    private List<string> blacklist = new List<string>();
 
     private string RutaConfiguracion
     {
         get
         {
             DirectoryInfo directorio =
-                Directory.GetParent(
-                    Application.dataPath
-                );
+                Directory.GetParent(Application.dataPath);
 
             return Path.Combine(
                 directorio.FullName,
@@ -62,16 +60,15 @@ public class BotrixConfigUI : MonoBehaviour
         public string voz;
         public string caracter;
         public float volumen;
+        public string blacklist;
     }
 
     private void Start()
     {
         BuscarReferencias();
-
         CargarDatos();
-
         ConfigurarSliderVolumen();
-
+        ActualizarTextoBlacklist();
         MostrarConfiguracion();
 
         CambiarEstado(
@@ -92,20 +89,16 @@ public class BotrixConfigUI : MonoBehaviour
     private void BuscarReferencias()
     {
         if (botrix == null)
-            botrix =
-                FindFirstObjectByType<BotrixWebView>();
+            botrix = FindFirstObjectByType<BotrixWebView>();
 
         if (botrixChat == null)
-            botrixChat =
-                FindFirstObjectByType<BotrixChat>();
+            botrixChat = FindFirstObjectByType<BotrixChat>();
 
         if (botrixChatUI == null)
-            botrixChatUI =
-                FindFirstObjectByType<BotrixChatUI>();
+            botrixChatUI = FindFirstObjectByType<BotrixChatUI>();
 
         if (tts == null)
-            tts =
-                FindFirstObjectByType<UnityTTS>();
+            tts = FindFirstObjectByType<UnityTTS>();
     }
 
     private void ConfigurarSliderVolumen()
@@ -126,8 +119,7 @@ public class BotrixConfigUI : MonoBehaviour
         );
     }
 
-    private void ActualizarTextoVolumen(
-        float valor)
+    private void ActualizarTextoVolumen(float valor)
     {
         if (textoVolumen == null)
             return;
@@ -149,14 +141,9 @@ public class BotrixConfigUI : MonoBehaviour
         {
             try
             {
-                string contenido =
-                    File.ReadAllText(
-                        RutaConfiguracion
-                    );
-
                 datos =
                     JsonUtility.FromJson<DatosConfiguracion>(
-                        contenido
+                        File.ReadAllText(RutaConfiguracion)
                     );
             }
             catch (Exception e)
@@ -176,181 +163,89 @@ public class BotrixConfigUI : MonoBehaviour
                     botrixUrl = URL_DEFAULT,
                     sessionId = "",
                     voz = VOZ_DEFAULT,
-
-                    // VACÍO = LEER TODO
                     caracter = CARACTER_DEFAULT,
-
-                    volumen = 1f
+                    volumen = 1f,
+                    blacklist = ""
                 };
         }
 
-        if (string.IsNullOrWhiteSpace(
-                datos.botrixUrl))
-        {
-            datos.botrixUrl =
-                URL_DEFAULT;
-        }
+        if (string.IsNullOrWhiteSpace(datos.botrixUrl))
+            datos.botrixUrl = URL_DEFAULT;
 
-        if (string.IsNullOrWhiteSpace(
-                datos.voz))
-        {
-            datos.voz =
-                VOZ_DEFAULT;
-        }
+        if (string.IsNullOrWhiteSpace(datos.voz))
+            datos.voz = VOZ_DEFAULT;
 
-        /*
-         * IMPORTANTE:
-         *
-         * NO hacemos:
-         *
-         * if (string.IsNullOrEmpty(datos.caracter))
-         *     datos.caracter = "*";
-         *
-         * Porque vacío significa LEER TODO.
-         */
         if (datos.caracter == null)
             datos.caracter = "";
 
+        if (datos.blacklist == null)
+            datos.blacklist = "";
+
         datos.volumen =
-            Mathf.Clamp01(
-                datos.volumen
-            );
+            Mathf.Clamp01(datos.volumen);
 
         if (botrixUrlInput != null)
-            botrixUrlInput.text =
-                datos.botrixUrl;
+            botrixUrlInput.text = datos.botrixUrl;
 
         if (sessionIdInput != null)
-        {
             sessionIdInput.text =
                 datos.sessionId ?? "";
-        }
 
         if (vozInput != null)
-            vozInput.text =
-                datos.voz;
+            vozInput.text = datos.voz;
 
         if (caracterInput != null)
-        {
-            caracterInput.text =
-                datos.caracter;
-        }
+            caracterInput.text = datos.caracter;
 
         if (volumenSlider != null)
-        {
-            volumenSlider.value =
-                datos.volumen;
-        }
+            volumenSlider.value = datos.volumen;
+
+        blacklist =
+            ObtenerBlacklistDesdeTexto(
+                datos.blacklist
+            );
 
         ActualizarTextoVolumen(
             datos.volumen
         );
 
-        if (string.IsNullOrEmpty(
-                datos.caracter))
-        {
-            Debug.Log(
-                "🎤 Configuración TTS: " +
-                "carácter vacío → LEER TODOS."
-            );
-        }
-        else
-        {
-            Debug.Log(
-                "🎤 Configuración TTS: " +
-                "carácter [" +
-                datos.caracter +
-                "]"
-            );
-        }
+        ActualizarTextoBlacklist();
+
+        Debug.Log(
+            "🚫 Blacklist cargada: " +
+            blacklist.Count +
+            " usuario(s)."
+        );
     }
 
     public void Guardar()
     {
-        string url =
-            botrixUrlInput != null
-                ? botrixUrlInput.text.Trim()
-                : "";
-
-        string session =
-            sessionIdInput != null
-                ? sessionIdInput.text.Trim()
-                : "";
-
-        string voz =
-            vozInput != null
-                ? vozInput.text.Trim()
-                : VOZ_DEFAULT;
-
-        string caracter =
-            caracterInput != null
-                ? caracterInput.text.Trim()
-                : "";
-
-        float volumen =
-            volumenSlider != null
-                ? volumenSlider.value
-                : 1f;
-
-        if (string.IsNullOrWhiteSpace(voz))
-            voz = VOZ_DEFAULT;
-
-        /*
-         * NO cambiar vacío a "*".
-         *
-         * Vacío = leer todos.
-         */
-        if (caracter == null)
-            caracter = "";
-
-        volumen =
-            Mathf.Clamp01(
-                volumen
-            );
-
         DatosConfiguracion datos =
-            new DatosConfiguracion
-            {
-                botrixUrl = url,
-                sessionId = session,
-                voz = voz,
-                caracter = caracter,
-                volumen = volumen
-            };
+            ObtenerDatosActuales();
 
         try
         {
-            string json =
+            File.WriteAllText(
+                RutaConfiguracion,
                 JsonUtility.ToJson(
                     datos,
                     true
-                );
-
-            File.WriteAllText(
-                RutaConfiguracion,
-                json
+                )
             );
 
             CambiarEstado(
                 "Configuración guardada."
             );
 
-            if (string.IsNullOrEmpty(caracter))
-            {
-                Debug.Log(
-                    "💾 Configuración guardada. " +
-                    "TTS configurado para LEER TODO."
-                );
-            }
-            else
-            {
-                Debug.Log(
-                    "💾 Configuración guardada. " +
-                    "Carácter TTS: [" +
-                    caracter +
-                    "]"
-                );
-            }
+            Debug.Log(
+                "💾 Configuración guardada correctamente."
+            );
+
+            Debug.Log(
+                "🚫 Blacklist guardada: " +
+                blacklist.Count +
+                " usuario(s)."
+            );
         }
         catch (Exception e)
         {
@@ -363,6 +258,250 @@ public class BotrixConfigUI : MonoBehaviour
                 "Error al guardar la configuración."
             );
         }
+    }
+
+    private DatosConfiguracion ObtenerDatosActuales()
+    {
+        string voz =
+            vozInput != null
+                ? vozInput.text.Trim()
+                : VOZ_DEFAULT;
+
+        if (string.IsNullOrWhiteSpace(voz))
+            voz = VOZ_DEFAULT;
+
+        return new DatosConfiguracion
+        {
+            botrixUrl =
+                botrixUrlInput != null
+                    ? botrixUrlInput.text.Trim()
+                    : "",
+
+            sessionId =
+                sessionIdInput != null
+                    ? sessionIdInput.text.Trim()
+                    : "",
+
+            voz = voz,
+
+            caracter =
+                caracterInput != null
+                    ? caracterInput.text.Trim()
+                    : "",
+
+            volumen =
+                volumenSlider != null
+                    ? Mathf.Clamp01(volumenSlider.value)
+                    : 1f,
+
+            blacklist =
+                ConvertirBlacklistATexto(
+                    blacklist
+                )
+        };
+    }
+
+    public void AgregarBlacklist()
+    {
+        string nombre =
+            ObtenerNombreBlacklistInput();
+
+        if (string.IsNullOrWhiteSpace(nombre))
+        {
+            CambiarEstado(
+                "Escribí un nombre en la blacklist."
+            );
+
+            return;
+        }
+
+        if (ExisteEnBlacklist(nombre))
+        {
+            CambiarEstado(
+                "Ese usuario ya está en la blacklist."
+            );
+
+            return;
+        }
+
+        blacklist.Add(nombre);
+
+        ActualizarTextoBlacklist();
+
+        LimpiarBlacklistInput();
+
+        Guardar();
+
+        CambiarEstado(
+            "Usuario agregado a la blacklist: " +
+            nombre
+        );
+
+        Debug.Log(
+            "🚫 Usuario agregado a blacklist: " +
+            nombre
+        );
+    }
+
+    public void QuitarBlacklist()
+    {
+        string nombre =
+            ObtenerNombreBlacklistInput();
+
+        if (string.IsNullOrWhiteSpace(nombre))
+        {
+            CambiarEstado(
+                "Escribí un nombre para quitarlo."
+            );
+
+            return;
+        }
+
+        int cantidadAntes =
+            blacklist.Count;
+
+        blacklist.RemoveAll(
+            x => string.Equals(
+                x,
+                nombre,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        if (blacklist.Count == cantidadAntes)
+        {
+            CambiarEstado(
+                "Ese usuario no está en la blacklist."
+            );
+
+            return;
+        }
+
+        ActualizarTextoBlacklist();
+
+        LimpiarBlacklistInput();
+
+        Guardar();
+
+        CambiarEstado(
+            "Usuario eliminado de la blacklist: " +
+            nombre
+        );
+
+        Debug.Log(
+            "✅ Usuario eliminado de blacklist: " +
+            nombre
+        );
+    }
+
+    public void LimpiarBlacklist()
+    {
+        blacklist.Clear();
+
+        ActualizarTextoBlacklist();
+
+        LimpiarBlacklistInput();
+
+        Guardar();
+
+        CambiarEstado(
+            "Blacklist limpiada."
+        );
+
+        Debug.Log(
+            "🧹 Blacklist limpiada."
+        );
+    }
+
+    private string ObtenerNombreBlacklistInput()
+    {
+        if (blacklistInput == null)
+            return "";
+
+        return blacklistInput.text.Trim();
+    }
+
+    private void LimpiarBlacklistInput()
+    {
+        if (blacklistInput != null)
+            blacklistInput.text = "";
+    }
+
+    private bool ExisteEnBlacklist(string nombre)
+    {
+        return blacklist.Exists(
+            x => string.Equals(
+                x,
+                nombre,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+    }
+
+    private void ActualizarTextoBlacklist()
+    {
+        if (blacklistTexto == null)
+            return;
+
+        blacklistTexto.text =
+            blacklist.Count == 0
+                ? "Blacklist vacía."
+                : string.Join(
+                    "\n",
+                    blacklist
+                );
+    }
+
+    private List<string> ObtenerBlacklistDesdeTexto(
+        string texto)
+    {
+        List<string> lista =
+            new List<string>();
+
+        if (string.IsNullOrWhiteSpace(texto))
+            return lista;
+
+        string[] nombres =
+            texto.Split(
+                new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+        foreach (string nombre in nombres)
+        {
+            string limpio =
+                nombre.Trim();
+
+            if (string.IsNullOrWhiteSpace(limpio))
+                continue;
+
+            if (!lista.Exists(
+                    x => string.Equals(
+                        x,
+                        limpio,
+                        StringComparison.OrdinalIgnoreCase
+                    )))
+            {
+                lista.Add(limpio);
+            }
+        }
+
+        return lista;
+    }
+
+    private string ConvertirBlacklistATexto(
+        List<string> lista)
+    {
+        if (lista == null ||
+            lista.Count == 0)
+        {
+            return "";
+        }
+
+        return string.Join(
+            "\n",
+            lista
+        );
     }
 
     public void Conectar()
@@ -419,31 +558,8 @@ public class BotrixConfigUI : MonoBehaviour
             return;
         }
 
-        /*
-         * EL CARÁCTER PUEDE ESTAR VACÍO.
-         *
-         * Vacío = leer todos los mensajes.
-         *
-         * Por eso NO hacemos:
-         *
-         * if (string.IsNullOrEmpty(caracter))
-         * {
-         *     return;
-         * }
-         */
-
-        if (caracter == null)
-            caracter = "";
-
-        volumen =
-            Mathf.Clamp01(
-                volumen
-            );
-
-        // Guardar configuración.
         Guardar();
 
-        // Buscar referencias nuevamente.
         BuscarReferencias();
 
         if (tts == null)
@@ -473,30 +589,23 @@ public class BotrixConfigUI : MonoBehaviour
             return;
         }
 
-        // Limpiar chat anterior.
         if (botrixChatUI != null)
-        {
             botrixChatUI.LimpiarChat();
-        }
 
-        // Limpiar cola anterior.
         botrixChat.LimpiarCola();
 
-        // Configurar TTS.
         tts.Configurar(
             sessionId,
             voz,
-            volumen
+            Mathf.Clamp01(volumen)
         );
 
-        /*
-         * Configurar carácter.
-         *
-         * "" = leer todos
-         * "*" = solo mensajes con *
-         */
         botrixChat.Configurar(
             caracter
+        );
+
+        botrixChat.ConfigurarBlacklist(
+            blacklist
         );
 
         if (string.IsNullOrEmpty(caracter))
@@ -504,33 +613,23 @@ public class BotrixConfigUI : MonoBehaviour
             CambiarEstado(
                 "Conectando... TTS leerá TODOS los mensajes."
             );
-
-            Debug.Log(
-                "🎤 TTS: carácter vacío → " +
-                "se leerán TODOS los mensajes."
-            );
         }
         else
         {
             CambiarEstado(
                 "Conectando con Botrix..."
             );
-
-            Debug.Log(
-                "🎤 TTS: solo mensajes que comiencen " +
-                "con [" +
-                caracter +
-                "]"
-            );
         }
 
-        // Conectar WebView.
-        botrix.Conectar(
-            url
-        );
+        botrix.Conectar(url);
 
-        // Mostrar chat.
         MostrarChat();
+
+        Debug.Log(
+            "🚫 Blacklist activa: " +
+            blacklist.Count +
+            " usuario(s)."
+        );
 
         Debug.Log(
             "✅ Botrix conectado correctamente."
@@ -539,88 +638,32 @@ public class BotrixConfigUI : MonoBehaviour
 
     public void Volver()
     {
-        Debug.Log(
-            "🔴 Volviendo a configuración..."
-        );
-
-        // ==========================================
-        // DETENER TTS
-        // ==========================================
-
         if (tts != null)
-        {
             tts.Stop();
-        }
-
-        // ==========================================
-        // LIMPIAR COLA TTS
-        // ==========================================
 
         if (botrixChat != null)
-        {
             botrixChat.LimpiarCola();
-        }
-
-        // ==========================================
-        // LIMPIAR CHAT VISUAL
-        // ==========================================
 
         if (botrixChatUI != null)
-        {
             botrixChatUI.LimpiarChat();
-        }
-
-        // ==========================================
-        // DESCONECTAR BOTRIX
-        // ==========================================
 
         if (botrix != null)
-        {
             botrix.Desconectar();
-        }
-
-        // ==========================================
-        // NO BORRAR datos.config
-        // ==========================================
 
         MostrarConfiguracion();
 
         CambiarEstado(
             "Desconectado. Chat limpiado."
         );
-
-        Debug.Log(
-            "✅ TTS detenido."
-        );
-
-        Debug.Log(
-            "✅ Cola TTS limpiada."
-        );
-
-        Debug.Log(
-            "✅ Chat visual limpiado."
-        );
-
-        Debug.Log(
-            "✅ Botrix desconectado."
-        );
-
-        Debug.Log(
-            "💾 datos.config conservado."
-        );
     }
 
     public void MostrarConfiguracion()
     {
         if (objetoConfiguracion != null)
-        {
             objetoConfiguracion.SetActive(true);
-        }
 
         if (objetoChat != null)
-        {
             objetoChat.SetActive(false);
-        }
 
         CambiarEstado(
             "Ingresá los datos y presioná CONECTAR."
@@ -630,23 +673,16 @@ public class BotrixConfigUI : MonoBehaviour
     public void MostrarChat()
     {
         if (objetoConfiguracion != null)
-        {
             objetoConfiguracion.SetActive(false);
-        }
 
         if (objetoChat != null)
-        {
             objetoChat.SetActive(true);
-        }
     }
 
     public void Probar()
     {
         if (tts == null)
-        {
-            tts =
-                FindFirstObjectByType<UnityTTS>();
-        }
+            tts = FindFirstObjectByType<UnityTTS>();
 
         if (tts == null)
         {
@@ -684,15 +720,10 @@ public class BotrixConfigUI : MonoBehaviour
         if (string.IsNullOrWhiteSpace(voz))
             voz = VOZ_DEFAULT;
 
-        volumen =
-            Mathf.Clamp01(
-                volumen
-            );
-
         tts.Configurar(
             sessionId,
             voz,
-            volumen
+            Mathf.Clamp01(volumen)
         );
 
         CambiarEstado(
@@ -706,9 +737,6 @@ public class BotrixConfigUI : MonoBehaviour
         string mensaje)
     {
         if (textoEstado != null)
-        {
-            textoEstado.text =
-                mensaje;
-        }
+            textoEstado.text = mensaje;
     }
 }

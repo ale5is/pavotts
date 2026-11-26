@@ -232,8 +232,7 @@ public class NativeChatManager : MonoBehaviour
             if (!kickSubscribed)
             {
                 SetStatus("Kick", "No se confirmó la suscripción en 20 segundos; reconectando.");
-                if (kickSocket != null)
-                    kickSocket.Close();
+                if (ReferenceEquals(kickSocket, socket)) socket.Close();
                 yield return new WaitForSecondsRealtime(retryDelay);
                 retryDelay = Mathf.Min(retryDelay * 2, 30);
                 continue;
@@ -280,44 +279,45 @@ public class NativeChatManager : MonoBehaviour
 
         twitchAuthenticated = false;
         twitchReceiveBuffer = string.Empty;
-        twitchSocket = new WebSocket(TwitchSocketUrl);
-        twitchSocket.OnOpen += OnTwitchOpen;
-        twitchSocket.OnError += error => SetStatus("Twitch", "Error: " + error);
-        twitchSocket.OnClose += code => SetStatus("Twitch", "Conexión cerrada: " + code);
-        twitchSocket.OnMessage += OnTwitchMessage;
-
-        var task = twitchSocket.Connect();
+        WebSocket socket = new WebSocket(TwitchSocketUrl);
+        twitchSocket = socket;
+        socket.OnOpen += () => OnTwitchOpen(socket);
+        socket.OnError += error => { if (ReferenceEquals(twitchSocket, socket) && !shuttingDown) SetStatus("Twitch", "Error: " + error); };
+        socket.OnClose += code => { if (ReferenceEquals(twitchSocket, socket) && !shuttingDown) SetStatus("Twitch", "Conexión cerrada: " + code); };
+        socket.OnMessage += bytes => OnTwitchMessage(socket, bytes);
+        var task = socket.Connect();
         while (!task.IsCompleted)
             yield return null;
 
-        if (task.IsFaulted)
+        if (task.IsFaulted && ReferenceEquals(twitchSocket, socket) && !shuttingDown)
             SetStatus("Twitch", "No se pudo abrir el WebSocket.");
     }
 
-    private async void OnTwitchOpen()
+    private async void OnTwitchOpen(WebSocket socket)
     {
-        if (twitchSocket == null || shuttingDown)
-            return;
-
+        if (!ReferenceEquals(twitchSocket, socket) || shuttingDown) return;
         try
         {
             SetStatus("Twitch", "WebSocket abierto; autenticando...");
-            await twitchSocket.SendText("PASS oauth:" + twitchAccessToken + "\r\n");
-            await twitchSocket.SendText("NICK " + twitchUsername + "\r\n");
-            await twitchSocket.SendText("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n");
-            await twitchSocket.SendText("JOIN #" + twitchChannel + "\r\n");
+            await socket.SendText("PASS oauth:" + twitchAccessToken + "\r\n");
+            if (!ReferenceEquals(twitchSocket, socket) || shuttingDown) return;
+            await socket.SendText("NICK " + twitchUsername + "\r\n");
+            if (!ReferenceEquals(twitchSocket, socket) || shuttingDown) return;
+            await socket.SendText("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n");
+            if (!ReferenceEquals(twitchSocket, socket) || shuttingDown) return;
+            await socket.SendText("JOIN #" + twitchChannel + "\r\n");
         }
         catch (Exception exception)
         {
+            if (!ReferenceEquals(twitchSocket, socket) || shuttingDown) return;
             SetStatus("Twitch", "Error enviando autenticación IRC: " + exception.Message);
-            if (twitchSocket != null)
-                twitchSocket.Close();
+            socket.Close();
         }
     }
 
-    private async void OnTwitchMessage(byte[] bytes)
+    private async void OnTwitchMessage(WebSocket socket, byte[] bytes)
     {
-        if (shuttingDown || bytes == null || bytes.Length == 0)
+        if (!ReferenceEquals(twitchSocket, socket) || shuttingDown || bytes == null || bytes.Length == 0)
             return;
 
         twitchReceiveBuffer += Encoding.UTF8.GetString(bytes);
@@ -332,6 +332,7 @@ public class NativeChatManager : MonoBehaviour
         int newlineIndex;
         while ((newlineIndex = twitchReceiveBuffer.IndexOf('\n')) >= 0)
         {
+            if (!ReferenceEquals(twitchSocket, socket) || shuttingDown) return;
             string line = twitchReceiveBuffer.Substring(0, newlineIndex).TrimEnd('\r');
             twitchReceiveBuffer = twitchReceiveBuffer.Substring(newlineIndex + 1);
 
@@ -342,8 +343,8 @@ public class NativeChatManager : MonoBehaviour
             {
                 try
                 {
-                    if (twitchSocket != null && twitchSocket.State == WebSocketState.Open)
-                        await twitchSocket.SendText("PONG " + line.Substring(5) + "\r\n");
+                    if (ReferenceEquals(twitchSocket, socket) && socket.State == WebSocketState.Open && !shuttingDown)
+                        await socket.SendText("PONG " + line.Substring(5) + "\r\n");
                 }
                 catch (Exception exception)
                 {
@@ -543,46 +544,43 @@ public class NativeChatManager : MonoBehaviour
             { "Origin", KickOrigin }
         };
 
-        kickSocket = new WebSocket(websocketUrl, headers);
-        kickSocket.OnOpen += OnKickOpen;
-        kickSocket.OnError += error => SetStatus("Kick", "WebSocket: " + error);
-        kickSocket.OnClose += code => SetStatus("Kick", "Conexión cerrada: " + code);
-        kickSocket.OnMessage += OnKickMessage;
-
+        WebSocket socket = new WebSocket(websocketUrl, headers);
+        kickSocket = socket;
+        socket.OnOpen += () => OnKickOpen(socket);
+        socket.OnError += error => { if (ReferenceEquals(kickSocket, socket) && !shuttingDown) SetStatus("Kick", "WebSocket: " + error); };
+        socket.OnClose += code => { if (ReferenceEquals(kickSocket, socket) && !shuttingDown) SetStatus("Kick", "Conexión cerrada: " + code); };
+        socket.OnMessage += bytes => OnKickMessage(socket, bytes);
         kickPendingToken = token;
-        var task = kickSocket.Connect();
+        var task = socket.Connect();
         while (!task.IsCompleted)
             yield return null;
 
-        if (task.IsFaulted)
+        if (task.IsFaulted && ReferenceEquals(kickSocket, socket) && !shuttingDown)
             SetStatus("Kick", "No se pudo abrir el WebSocket Centrifugo.");
     }
 
     private string kickPendingToken;
 
-    private async void OnKickOpen()
+    private async void OnKickOpen(WebSocket socket)
     {
-        if (kickSocket == null || shuttingDown)
-            return;
-
+        if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
         try
         {
-            await kickSocket.SendText(
-                "{\"id\":1,\"connect\":{\"token\":\"" + kickPendingToken + "\",\"name\":\"unity-pavotts\"}}"
-            );
+            await socket.SendText("{\"id\":1,\"connect\":{\"token\":\"" + kickPendingToken + "\",\"name\":\"unity-pavotts\"}}");
+            if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
             SetStatus("Kick", "WebSocket abierto; autenticando realtime...");
         }
         catch (Exception exception)
         {
+            if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
             SetStatus("Kick", "No se pudo enviar el token realtime: " + exception.Message);
-            if (kickSocket != null)
-                kickSocket.Close();
+            socket.Close();
         }
     }
 
-    private async void OnKickMessage(byte[] bytes)
+    private async void OnKickMessage(WebSocket socket, byte[] bytes)
     {
-        if (shuttingDown)
+        if (!ReferenceEquals(kickSocket, socket) || shuttingDown || bytes == null || bytes.Length == 0)
             return;
 
         string raw = Encoding.UTF8.GetString(bytes);
@@ -590,6 +588,7 @@ public class NativeChatManager : MonoBehaviour
 
         foreach (string frame in frames)
         {
+            if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
             Dictionary<string, object> root;
             try
             {
@@ -678,8 +677,8 @@ public class NativeChatManager : MonoBehaviour
             {
                 try
                 {
-                    if (kickSocket != null && kickSocket.State == WebSocketState.Open)
-                        await kickSocket.SendText("{\\"pong\\":{}}");
+                    if (ReferenceEquals(kickSocket, socket) && socket.State == WebSocketState.Open && !shuttingDown)
+                        await socket.SendText("{\\"pong\\":{}}");
                 }
                 catch (Exception exception)
                 {

@@ -675,7 +675,7 @@ public class NativeChatManager : MonoBehaviour
 
         object eventValue;
         if (!envelope.TryGetValue("event", out eventValue) ||
-            !string.Equals(Convert.ToString(eventValue), "App\\\\Events\\\\ChatMessageEvent", StringComparison.Ordinal))
+            !string.Equals(Convert.ToString(eventValue), "App\\Events\\ChatMessageEvent", StringComparison.Ordinal))
             return;
 
         object dataValue;

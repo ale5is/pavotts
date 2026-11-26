@@ -34,6 +34,12 @@ Uses Kick's current Centrifugo realtime WebSocket path rather than the retired P
 
 The client answers Centri­fugo ping frames, parses both object and string publication payloads, surfaces protocol error replies instead of silently waiting for a handshake timeout, reconnects with bounded backoff and renews the guest session before the documented 45-minute token lifetime. Kick's website realtime API is not the same as its documented public API and may change.
 
+## Connection lifecycle and stale callback protection
+
+Twitch and Kick WebSocket event handlers capture the exact socket instance that registered them. Every callback checks that this instance is still the manager's active socket before changing connection state, publishing chat messages, sending protocol replies or closing a connection. Async send handlers re-check identity after each await, preventing a delayed callback from an old connection from sending through or modifying a newer session.
+
+Kick's three HTTP negotiation stages also stop immediately after a request completes if the manager has been disconnected. This prevents a late channel/endpoint/token response from creating a realtime socket after disconnect.
+
 ## Performance and C++ decision
 
 Do not port the whole application to C++. Unity scenes, TMP UI, MonoBehaviours, audio playback, configuration and lifecycle integration are already managed by Unity's C# runtime. Rewriting those parts would increase interop and maintenance costs without reducing network latency.

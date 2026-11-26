@@ -40,7 +40,7 @@ public class BotrixChatUI : MonoBehaviour
     private void OnDestroy()
     {
         if (botrix != null)
-            botrix.OnChatMessage -= RecibirMensaje;
+            ChatMessageBus.OnMessage -= RecibirMensaje;
     }
 
     private void BuscarReferencias()
@@ -64,8 +64,8 @@ public class BotrixChatUI : MonoBehaviour
             return;
         }
 
-        botrix.OnChatMessage -= RecibirMensaje;
-        botrix.OnChatMessage += RecibirMensaje;
+        ChatMessageBus.OnMessage -= RecibirMensaje;
+        ChatMessageBus.OnMessage += RecibirMensaje;
 
         Debug.Log(
             "✅ BotrixChatUI conectado correctamente."

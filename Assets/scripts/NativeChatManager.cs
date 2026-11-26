@@ -603,6 +603,29 @@ public class NativeChatManager : MonoBehaviour
             if (root == null)
                 continue;
 
+            object protocolError;
+            if (root.TryGetValue("error", out protocolError) && protocolError != null)
+            {
+                Dictionary<string, object> errorObject = protocolError as Dictionary<string, object>;
+                string errorMessage = "Error de protocolo realtime.";
+                if (errorObject != null)
+                {
+                    object messageValue;
+                    object codeValue;
+                    if (errorObject.TryGetValue("message", out messageValue) && messageValue != null)
+                        errorMessage = Convert.ToString(messageValue);
+                    if (errorObject.TryGetValue("code", out codeValue) && codeValue != null)
+                        errorMessage += " (código " + Convert.ToString(codeValue) + ")";
+                }
+
+                SetStatus("Kick", errorMessage + " Se reiniciará la conexión.");
+                kickConnected = false;
+                kickSubscribed = false;
+                if (kickSocket != null)
+                    kickSocket.Close();
+                continue;
+            }
+
             object idValue;
             int id = 0;
             if (root.TryGetValue("id", out idValue))

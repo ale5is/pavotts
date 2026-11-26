@@ -54,3 +54,21 @@ This branch has not yet been opened or built in the Unity 2022.3.62f3 Editor in 
 8. Confirm the build contains no WebView/Chromium plugin or WebView native library.
 
 A source-level change is not treated as a successful live connection until these tests pass.
+
+
+## Verificación manual pendiente en Unity 2022.3
+
+La revisión estática del código no sustituye una compilación ni una prueba contra los servicios. Antes de considerar terminado el reemplazo, ejecutar esta matriz en una copia del proyecto:
+
+1. Importar el proyecto y esperar a que Unity resuelva `com.endel.nativewebsocket`.
+2. Confirmar que no aparecen errores de compilación en Console.
+3. Abrir la configuración, introducir solamente un canal y conectar cada plataforma por separado.
+4. Twitch: usar un token OAuth válido con `chat:read`; comprobar JOIN, recepción de PRIVMSG, PING/PONG y rechazo de token inválido.
+5. YouTube: probar con un canal que esté transmitiendo en directo con el chat habilitado; comprobar mensajes normales, Super Chats y reconexión al finalizar la emisión.
+6. Kick: comprobar resolución del canal, negociación Centrifugo, confirmación de suscripción, mensajes y renovación de sesión.
+7. Conectar dos y luego tres plataformas a la vez; comprobar que todos los mensajes llegan a una única cola TTS FIFO.
+8. Desconectar mientras llegan mensajes; comprobar que no se encolan mensajes posteriores y que una reconexión no duplica suscripciones.
+9. Mantener la aplicación en segundo plano y verificar el comportamiento con `Application.runInBackground`.
+10. Repetir en Windows y Android si ambos son destinos de publicación.
+
+No marcar el conector como validado hasta completar estas pruebas. En particular, YouTube InnerTube y el protocolo realtime de Kick no son interfaces públicas estables y pueden cambiar sin aviso.

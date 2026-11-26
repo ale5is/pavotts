@@ -1748,7 +1748,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &721068373
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2683,13 +2683,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 92759ad973a988b458563f4ab51b158c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  botrix: {fileID: 1546208114}
   botrixChat: {fileID: 1546208115}
   botrixChatUI: {fileID: 0}
   tts: {fileID: 1546208116}
   objetoConfiguracion: {fileID: 1699346021}
   objetoChat: {fileID: 160350046}
-  botrixUrlInput: {fileID: 721068374}
   sessionIdInput: {fileID: 2103907702}
   vozInput: {fileID: 1931485070}
   caracterInput: {fileID: 1879289069}
@@ -3333,7 +3331,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1327185545
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3995,13 +3993,12 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1546208113}
-  - component: {fileID: 1546208114}
   - component: {fileID: 1546208115}
   - component: {fileID: 1546208116}
   - component: {fileID: 1546208117}
   - component: {fileID: 1546208118}
   m_Layer: 0
-  m_Name: BotrixManager
+  m_Name: NativeChatRuntime
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -4022,23 +4019,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1546208114
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1546208112}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 89c0611218214b14199dc4abf4519522, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  botrixUrl: 
-  marginLeft: 0
-  marginTop: 0
-  marginRight: 0
-  marginBottom: 0
 --- !u!114 &1546208115
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4051,11 +4031,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0ba13dadf61913d499c7bb5c728a6d25, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  botrix: {fileID: 1546208114}
   tts: {fileID: 1546208116}
   chatUI: {fileID: 0}
   caracterTTS: 
-  maxMensajesTTS: 24
+  maxMensajesTTS: 256
   blacklist: []
 --- !u!114 &1546208116
 MonoBehaviour:
@@ -4085,7 +4064,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 06100a8c7d9670643b206517fe3fd7fb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  botrix: {fileID: 1546208114}
   chatText: {fileID: 138023028}
   maxLineas: 24
   mostrarPlataforma: 1

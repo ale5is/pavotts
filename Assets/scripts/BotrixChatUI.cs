@@ -38,8 +38,7 @@ public class BotrixChatUI : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (botrix != null)
-            ChatMessageBus.OnMessage -= RecibirMensaje;
+        ChatMessageBus.OnMessage -= RecibirMensaje;
     }
 
     private void BuscarReferencias()

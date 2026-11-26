@@ -23,9 +23,6 @@ public class BotrixChat : MonoBehaviour
     private readonly Queue<string> colaTTS =
         new Queue<string>();
 
-    private readonly HashSet<string> mensajesProcesados =
-        new HashSet<string>();
-
     private bool hablando;
 
     private static readonly Regex EspaciosRegex =
@@ -39,10 +36,14 @@ public class BotrixChat : MonoBehaviour
         BuscarReferencias();
     }
 
+    private void Update()
+    {
+        ChatMessageBus.DispatchPending(128);
+    }
+
     private void OnDestroy()
     {
-        if (botrix != null)
-            ChatMessageBus.OnMessage -= ProcesarMensaje;
+        ChatMessageBus.OnMessage -= ProcesarMensaje;
 
         if (tts != null)
             tts.OnFinished -= TTSFinalizado;
@@ -389,23 +390,6 @@ public class BotrixChat : MonoBehaviour
         if (string.IsNullOrEmpty(texto))
             return;
 
-        string id =
-            nombre +
-            "|" +
-            mensaje +
-            "|" +
-            plataforma;
-
-        if (!mensajesProcesados.Add(id))
-            return;
-
-        if (mensajesProcesados.Count > 1000)
-        {
-            mensajesProcesados.Clear();
-
-            mensajesProcesados.Add(id);
-        }
-
         nombre =
             PrepararNombreTTS(nombre);
 
@@ -489,6 +473,7 @@ public class BotrixChat : MonoBehaviour
     public void LimpiarCola()
     {
         colaTTS.Clear();
+        ChatMessageBus.ClearPending();
 
         hablando = false;
 

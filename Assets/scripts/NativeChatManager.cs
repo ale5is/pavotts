@@ -279,6 +279,7 @@ public class NativeChatManager : MonoBehaviour
         }
 
         twitchAuthenticated = false;
+        twitchReceiveBuffer = string.Empty;
         twitchSocket = new WebSocket(TwitchSocketUrl);
         twitchSocket.OnOpen += OnTwitchOpen;
         twitchSocket.OnError += error => SetStatus("Twitch", "Error: " + error);
@@ -377,11 +378,17 @@ public class NativeChatManager : MonoBehaviour
             if (bodyIndex < 0)
                 continue;
 
-            int prefixStart = line.StartsWith("@", StringComparison.Ordinal)
-                ? line.IndexOf(" :", StringComparison.Ordinal) + 2
-                : 1;
+            int prefixStart = 1;
+            if (line.StartsWith("@", StringComparison.Ordinal))
+            {
+                int tagSeparator = line.IndexOf(" :", StringComparison.Ordinal);
+                if (tagSeparator < 0)
+                    continue;
 
-            if (prefixStart < 1 || prefixStart >= commandIndex)
+                prefixStart = tagSeparator + 2;
+            }
+
+            if (prefixStart >= commandIndex)
                 continue;
 
             string prefix = line.Substring(prefixStart, commandIndex - prefixStart);

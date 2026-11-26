@@ -34,6 +34,10 @@ Uses Kick's current Centrifugo realtime WebSocket path rather than the retired P
 
 The client answers Centri­fugo ping frames, parses both object and string publication payloads, surfaces protocol error replies instead of silently waiting for a handshake timeout, reconnects with bounded backoff and renews the guest session before the documented 45-minute token lifetime. Kick's website realtime API is not the same as its documented public API and may change.
 
+## Message dispatch fault isolation
+
+The central message bus invokes each subscriber independently. An exception in one listener is logged but does not prevent the remaining listeners from receiving the same message or stop subsequent queued messages from being dispatched. YouTube also checks its stop flag immediately after the initial channel-page request, before parsing or publishing any result from a disconnected session.
+
 ## Connection lifecycle and stale callback protection
 
 Twitch and Kick WebSocket event handlers capture the exact socket instance that registered them. Every callback checks that this instance is still the manager's active socket before changing connection state, publishing chat messages, sending protocol replies or closing a connection. Async send handlers re-check identity after each await, preventing a delayed callback from an old connection from sending through or modifying a newer session.

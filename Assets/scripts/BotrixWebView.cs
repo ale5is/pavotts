@@ -19,8 +19,6 @@ public class BotrixWebView : MonoBehaviour
     private bool conectado;
     private bool iniciando;
 
-    public event Action<string, string, string> OnChatMessage;
-
     public void Conectar(string nuevaUrl)
     {
         if (iniciando)
@@ -407,7 +405,7 @@ public class BotrixWebView : MonoBehaviour
             if (string.IsNullOrEmpty(texto))
                 return;
 
-            OnChatMessage?.Invoke(
+            ChatMessageBus.Publish(
                 nombre,
                 texto,
                 plataforma

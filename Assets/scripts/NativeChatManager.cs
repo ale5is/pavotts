@@ -27,6 +27,7 @@ public class NativeChatManager : MonoBehaviour
     private bool kickSubscribed;
     private bool twitchAuthenticated;
     private bool twitchAuthenticationRejected;
+    private string twitchReceiveBuffer = string.Empty;
     private bool shuttingDown;
 
     public event Action<string, string> OnPlatformStatus;
@@ -42,6 +43,7 @@ public class NativeChatManager : MonoBehaviour
         shuttingDown = false;
         twitchAuthenticated = false;
         twitchAuthenticationRejected = false;
+        twitchReceiveBuffer = string.Empty;
         Application.runInBackground = true;
         twitchChannel = NormalizeChannel(twitch);
         twitchUsername = NormalizeChannel(twitchUser);
@@ -74,6 +76,7 @@ public class NativeChatManager : MonoBehaviour
         kickConnected = false;
         kickSubscribed = false;
         kickPendingToken = null;
+        twitchReceiveBuffer = string.Empty;
 
         if (twitchKeepAliveRoutine != null)
         {
@@ -313,14 +316,27 @@ public class NativeChatManager : MonoBehaviour
 
     private async void OnTwitchMessage(byte[] bytes)
     {
-        if (shuttingDown)
+        if (shuttingDown || bytes == null || bytes.Length == 0)
             return;
 
-        string payload = Encoding.UTF8.GetString(bytes);
-        string[] lines = payload.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+        twitchReceiveBuffer += Encoding.UTF8.GetString(bytes);
 
-        foreach (string line in lines)
+        if (twitchReceiveBuffer.Length > 65536)
         {
+            twitchReceiveBuffer = string.Empty;
+            SetStatus("Twitch", "Se descartó un fragmento IRC excesivo o incompleto.");
+            return;
+        }
+
+        int newlineIndex;
+        while ((newlineIndex = twitchReceiveBuffer.IndexOf('\n')) >= 0)
+        {
+            string line = twitchReceiveBuffer.Substring(0, newlineIndex).TrimEnd('\r');
+            twitchReceiveBuffer = twitchReceiveBuffer.Substring(newlineIndex + 1);
+
+            if (string.IsNullOrEmpty(line))
+                continue;
+
             if (line.StartsWith("PING ", StringComparison.Ordinal))
             {
                 try
@@ -332,6 +348,7 @@ public class NativeChatManager : MonoBehaviour
                 {
                     SetStatus("Twitch", "No se pudo responder al PING: " + exception.Message);
                 }
+
                 continue;
             }
 
@@ -348,6 +365,7 @@ public class NativeChatManager : MonoBehaviour
                 SetStatus("Twitch", "Twitch rechazó el token. Revisá chat:read y la cuenta; no se reintentará hasta volver a conectar.");
                 if (twitchSocket != null)
                     twitchSocket.Close();
+
                 continue;
             }
 
@@ -360,7 +378,7 @@ public class NativeChatManager : MonoBehaviour
                 continue;
 
             int prefixStart = line.StartsWith("@", StringComparison.Ordinal)
-                ? line.IndexOf(" :", StringComparison.Ordinal) + 2
+                ? line.IndexOf(" : ", StringComparison.Ordinal) + 3
                 : 1;
 
             if (prefixStart < 1 || prefixStart >= commandIndex)

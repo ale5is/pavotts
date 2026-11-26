@@ -416,6 +416,7 @@ public class NativeChatManager : MonoBehaviour
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
             request.timeout = 20;
             yield return request.SendWebRequest();
+            if (shuttingDown) yield break;
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -459,6 +460,7 @@ public class NativeChatManager : MonoBehaviour
             KickApiBase + "/channels/" + kickChatroomId + "/chat/connection", body))
         {
             yield return request.SendWebRequest();
+            if (shuttingDown) yield break;
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -505,6 +507,7 @@ public class NativeChatManager : MonoBehaviour
             "{\"client_id\":\"" + kickClientId + "\"}"))
         {
             yield return request.SendWebRequest();
+            if (shuttingDown) yield break;
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -682,9 +685,9 @@ public class NativeChatManager : MonoBehaviour
                 }
                 catch (Exception exception)
                 {
+                    if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
                     SetStatus("Kick", "No se pudo responder al ping: " + exception.Message);
-                    if (kickSocket != null)
-                        kickSocket.Close();
+                    socket.Close();
                 }
                 continue;
             }
@@ -698,7 +701,8 @@ public class NativeChatManager : MonoBehaviour
                 continue;
 
             object data;
-            if (publication.TryGetValue("data", out data))
+            if (publication.TryGetValue("data", out data) &&
+                ReferenceEquals(kickSocket, socket) && !shuttingDown)
                 ProcessKickPublication(data);
         }
     }

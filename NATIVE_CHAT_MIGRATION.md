@@ -20,7 +20,7 @@ Uses secure Twitch IRC WebSocket at `wss://irc-ws.chat.twitch.tv:443`.
 
 Twitch's current developer documentation requires a user access token with `chat:read` and the username associated with that token. The configuration UI therefore includes a separate username and OAuth token field in addition to the channel name. The token is stored in the existing local `datos.config` file alongside the existing TikTok session ID; protect that file as a credential store.
 
-The connector handles IRC CAP negotiation, JOIN, PRIVMSG parsing, display-name tags, PING/PONG, reconnect backoff and stops retrying after an explicit OAuth rejection. Twitch recommends EventSub for new chat integrations; IRC remains supported but has feature limitations. IRC was selected here as the smallest direct read-only transport; a later EventSub migration would require an application Client ID and EventSub subscription lifecycle.
+The connector handles IRC CAP negotiation, JOIN, PRIVMSG parsing, display-name tags, PING/PONG, reconnect backoff and stops retrying after an explicit OAuth rejection. Incoming WebSocket chunks are buffered until complete CRLF-delimited IRC lines arrive, so a line split across WebSocket messages is not parsed prematurely. The partial-line buffer is cleared on reconnect and bounded to 64 KiB. Twitch recommends EventSub for new chat integrations; IRC remains supported but has feature limitations. IRC was selected here as the smallest direct read-only transport; a later EventSub migration would require an application Client ID and EventSub subscription lifecycle.
 
 ### YouTube
 
@@ -32,7 +32,7 @@ InnerTube is an undocumented YouTube web interface. YouTube can change its page 
 
 Uses Kick's current Centrifugo realtime WebSocket path rather than the retired Pusher app key. It resolves the channel chatroom, negotiates the realtime endpoint, obtains a temporary guest token, sends the Kick Origin header on the WebSocket handshake, connects and subscribes to `chatrooms.{chatroom_id}.v2`.
 
-The client answers Centri­fugo ping frames, parses both object and string publication payloads, reconnects with bounded backoff and renews the guest session before the documented 45-minute token lifetime. Kick's website realtime API is not the same as its documented public API and may change.
+The client answers Centri­fugo ping frames, parses both object and string publication payloads, surfaces protocol error replies instead of silently waiting for a handshake timeout, reconnects with bounded backoff and renews the guest session before the documented 45-minute token lifetime. Kick's website realtime API is not the same as its documented public API and may change.
 
 ## Performance and C++ decision
 

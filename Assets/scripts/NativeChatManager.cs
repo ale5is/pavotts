@@ -202,6 +202,10 @@ public class NativeChatManager : MonoBehaviour
 
         while (!shuttingDown)
         {
+            kickConnected = false;
+            kickSubscribed = false;
+            kickPendingToken = null;
+
             yield return StartCoroutine(ConnectKickRoutine());
 
             if (shuttingDown)

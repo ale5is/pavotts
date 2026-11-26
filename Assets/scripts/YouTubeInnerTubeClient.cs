@@ -71,6 +71,9 @@ public class YouTubeInnerTubeClient : MonoBehaviour
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36");
             yield return request.SendWebRequest();
 
+            if (stopping)
+                yield break;
+
             if (request.result != UnityWebRequest.Result.Success)
             {
                 SetStatus("No se pudo abrir el canal: " + request.error);

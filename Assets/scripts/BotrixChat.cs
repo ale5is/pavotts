@@ -6,7 +6,6 @@ using UnityEngine;
 public class BotrixChat : MonoBehaviour
 {
     [Header("REFERENCIAS")]
-    [SerializeField] private BotrixWebView botrix;
     [SerializeField] private UnityTTS tts;
     [SerializeField] private BotrixChatUI chatUI;
 
@@ -51,10 +50,6 @@ public class BotrixChat : MonoBehaviour
 
     private void BuscarReferencias()
     {
-        if (botrix == null)
-            botrix =
-                FindFirstObjectByType<BotrixWebView>();
-
         if (tts == null)
             tts =
                 FindFirstObjectByType<UnityTTS>();
@@ -62,15 +57,6 @@ public class BotrixChat : MonoBehaviour
         if (chatUI == null)
             chatUI =
                 FindFirstObjectByType<BotrixChatUI>();
-
-        if (botrix == null)
-        {
-            Debug.LogError(
-                "❌ No se encontró BotrixWebView."
-            );
-
-            return;
-        }
 
         if (tts == null)
         {

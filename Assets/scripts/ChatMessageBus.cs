@@ -48,17 +48,25 @@ public static class ChatMessageBus
                 message = Pending.Dequeue();
             }
 
-            try
+            Action<string, string, string> subscribers = OnMessage;
+            if (subscribers != null)
             {
-                OnMessage?.Invoke(
-                    message.Name,
-                    message.Text,
-                    message.Platform
-                );
-            }
-            catch (Exception exception)
-            {
-                Debug.LogException(exception);
+                Delegate[] callbacks = subscribers.GetInvocationList();
+                foreach (Delegate callback in callbacks)
+                {
+                    try
+                    {
+                        ((Action<string, string, string>)callback)(
+                            message.Name,
+                            message.Text,
+                            message.Platform
+                        );
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogException(exception);
+                    }
+                }
             }
 
             dispatched++;

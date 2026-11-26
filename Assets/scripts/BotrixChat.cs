@@ -43,7 +43,7 @@ public class BotrixChat : MonoBehaviour
     private void OnDestroy()
     {
         if (botrix != null)
-            botrix.OnChatMessage -= ProcesarMensaje;
+            ChatMessageBus.OnMessage -= ProcesarMensaje;
 
         if (tts != null)
             tts.OnFinished -= TTSFinalizado;
@@ -102,8 +102,8 @@ public class BotrixChat : MonoBehaviour
 
         NormalizarBlacklist();
 
-        botrix.OnChatMessage -= ProcesarMensaje;
-        botrix.OnChatMessage += ProcesarMensaje;
+        ChatMessageBus.OnMessage -= ProcesarMensaje;
+        ChatMessageBus.OnMessage += ProcesarMensaje;
 
         tts.OnFinished -= TTSFinalizado;
         tts.OnFinished += TTSFinalizado;

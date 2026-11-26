@@ -378,7 +378,7 @@ public class NativeChatManager : MonoBehaviour
                 continue;
 
             int prefixStart = line.StartsWith("@", StringComparison.Ordinal)
-                ? line.IndexOf(" : ", StringComparison.Ordinal) + 3
+                ? line.IndexOf(" :", StringComparison.Ordinal) + 2
                 : 1;
 
             if (prefixStart < 1 || prefixStart >= commandIndex)

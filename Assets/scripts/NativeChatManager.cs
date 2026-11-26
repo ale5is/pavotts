@@ -591,7 +591,9 @@ public class NativeChatManager : MonoBehaviour
 
         foreach (string frame in frames)
         {
-            if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
+            if (!ReferenceEquals(kickSocket, socket) || shuttingDown)
+                return;
+
             Dictionary<string, object> root;
             try
             {
@@ -623,8 +625,7 @@ public class NativeChatManager : MonoBehaviour
                 SetStatus("Kick", errorMessage + " Se reiniciará la conexión.");
                 kickConnected = false;
                 kickSubscribed = false;
-                if (kickSocket != null)
-                    kickSocket.Close();
+                socket.Close();
                 continue;
             }
 
@@ -637,24 +638,28 @@ public class NativeChatManager : MonoBehaviour
             if (id == 1 && root.TryGetValue("connect", out connect) && connect != null && !kickConnected)
             {
                 kickConnected = true;
-                if (kickSocket != null && kickSocket.State == WebSocketState.Open)
+                if (socket.State == WebSocketState.Open)
                 {
                     try
                     {
-                        await kickSocket.SendText(
-                        "{\\"id\\":2,\\"subscribe\\":{\\"channel\\":\\"chatrooms." +
-                        kickChatroomId + ".v2\\"}}"
-                    );
-
+                        await socket.SendText(
+                            "{\\"id\\":2,\\"subscribe\\":{\\"channel\\":\\"chatrooms." +
+                            kickChatroomId + ".v2\\"}}"
+                        );
+                        if (!ReferenceEquals(kickSocket, socket) || shuttingDown)
+                            return;
                     }
                     catch (Exception exception)
                     {
+                        if (!ReferenceEquals(kickSocket, socket) || shuttingDown)
+                            return;
                         kickSubscribed = false;
                         SetStatus("Kick", "No se pudo suscribir al chat: " + exception.Message);
-                        if (kickSocket != null)
-                            kickSocket.Close();
+                        socket.Close();
+                        return;
                     }
                 }
+
                 SetStatus("Kick", "Autenticado; esperando confirmación de suscripción.");
                 continue;
             }
@@ -671,7 +676,6 @@ public class NativeChatManager : MonoBehaviour
             Dictionary<string, object> push = root.TryGetValue("push", out pushValue)
                 ? pushValue as Dictionary<string, object>
                 : null;
-
             if (push == null)
                 continue;
 
@@ -680,14 +684,18 @@ public class NativeChatManager : MonoBehaviour
             {
                 try
                 {
-                    if (ReferenceEquals(kickSocket, socket) && socket.State == WebSocketState.Open && !shuttingDown)
+                    if (socket.State == WebSocketState.Open)
                         await socket.SendText("{\\"pong\\":{}}");
+                    if (!ReferenceEquals(kickSocket, socket) || shuttingDown)
+                        return;
                 }
                 catch (Exception exception)
                 {
-                    if (!ReferenceEquals(kickSocket, socket) || shuttingDown) return;
+                    if (!ReferenceEquals(kickSocket, socket) || shuttingDown)
+                        return;
                     SetStatus("Kick", "No se pudo responder al ping: " + exception.Message);
                     socket.Close();
+                    return;
                 }
                 continue;
             }
@@ -696,7 +704,6 @@ public class NativeChatManager : MonoBehaviour
             Dictionary<string, object> publication = push.TryGetValue("pub", out publicationValue)
                 ? publicationValue as Dictionary<string, object>
                 : null;
-
             if (publication == null)
                 continue;
 

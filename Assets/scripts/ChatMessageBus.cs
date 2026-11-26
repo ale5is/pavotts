@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 public static class ChatMessageBus
 {
@@ -47,11 +48,18 @@ public static class ChatMessageBus
                 message = Pending.Dequeue();
             }
 
-            OnMessage?.Invoke(
-                message.Name,
-                message.Text,
-                message.Platform
-            );
+            try
+            {
+                OnMessage?.Invoke(
+                    message.Name,
+                    message.Text,
+                    message.Platform
+                );
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
 
             dispatched++;
         }

@@ -348,7 +348,11 @@ public class NativeChatManager : MonoBehaviour
                 }
                 catch (Exception exception)
                 {
+                    if (!ReferenceEquals(twitchSocket, socket) || shuttingDown)
+                        return;
                     SetStatus("Twitch", "No se pudo responder al PING: " + exception.Message);
+                    socket.Close();
+                    return;
                 }
 
                 continue;
@@ -365,8 +369,8 @@ public class NativeChatManager : MonoBehaviour
             {
                 twitchAuthenticationRejected = true;
                 SetStatus("Twitch", "Twitch rechazó el token. Revisá chat:read y la cuenta; no se reintentará hasta volver a conectar.");
-                if (twitchSocket != null)
-                    twitchSocket.Close();
+                if (ReferenceEquals(twitchSocket, socket))
+                    socket.Close();
 
                 continue;
             }

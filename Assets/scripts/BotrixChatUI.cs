@@ -5,7 +5,6 @@ using TMPro;
 public class BotrixChatUI : MonoBehaviour
 {
     [Header("REFERENCIAS")]
-    [SerializeField] private BotrixWebView botrix;
     [SerializeField] private TMP_Text chatText;
 
     [Header("CONFIGURACIÓN")]
@@ -45,23 +44,11 @@ public class BotrixChatUI : MonoBehaviour
 
     private void BuscarReferencias()
     {
-        if (botrix == null)
-            botrix = FindFirstObjectByType<BotrixWebView>();
-
         if (chatText == null)
         {
             Debug.LogError(
                 "❌ BotrixChatUI: No se encontró ChatText."
             );
-        }
-
-        if (botrix == null)
-        {
-            Debug.LogError(
-                "❌ BotrixChatUI: No se encontró BotrixWebView."
-            );
-
-            return;
         }
 
         ChatMessageBus.OnMessage -= RecibirMensaje;

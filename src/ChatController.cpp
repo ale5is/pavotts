@@ -599,7 +599,7 @@ void ChatController::setStatus(const QString &platform, const QString &message)
 
 void ChatController::setConnectedState()
 {
-    const bool now = !m_stopping && ((m_twitchSocket && m_twitchAuthenticated) || (m_kickSocket && m_kickSubscribed) || !m_youtubeContinuation.isEmpty());
+    const bool now = !m_stopping && ((m_twitchSocket && m_twitchAuthenticated) || (m_kickSocket && m_kickSubscribed) || m_youtubeConnected);
     if (m_connected != now) {
         m_connected = now;
         emit connectionChanged();
@@ -641,7 +641,7 @@ void ChatController::disconnectAll()
     m_youtubeTimer.stop();
     m_twitchRetryTimer.stop(); m_kickRetryTimer.stop();
     m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
-    m_twitchAuthenticated = false; m_kickSubscribed = false;
+    m_twitchAuthenticated = false; m_kickSubscribed = false; m_youtubeConnected = false;
     m_twitchBuffer.clear();
     setStatus(QStringLiteral("Twitch"), QStringLiteral("Desconectado."));
     setStatus(QStringLiteral("Kick"), QStringLiteral("Desconectado."));
@@ -1144,7 +1144,6 @@ void ChatController::connectYouTube()
             m_youtubeContinuation = findLiveChatContinuation(renderer);
             if (!m_youtubeContinuation.isEmpty()) {
                 setStatus(QStringLiteral("YouTube"), QStringLiteral("Se encontró una continuación de chat en la página; iniciando lectura."));
-                setConnectedState();
                 m_youtubePollDelay = 1000;
                 pollYouTube();
                 return;
@@ -1229,7 +1228,6 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
         m_youtubeContinuation = youtubeAllMessagesContinuation(continuation);
         m_youtubePollDelay = initialDelay > 0 ? initialDelay : 3000;
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Continuación live-position obtenida; consultando el chat."));
-        setConnectedState();
         pollYouTube();
     });
 }
@@ -1278,6 +1276,8 @@ void ChatController::pollYouTube()
         m_youtubeReply = nullptr;
 
         if (failed) {
+            m_youtubeConnected = false;
+            setConnectedState();
             const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
             setStatus(QStringLiteral("YouTube"), QStringLiteral("InnerTube rechazó la consulta (HTTP %1): %2. Respuesta: %3")
                           .arg(code).arg(error).arg(detail.isEmpty() ? QStringLiteral("sin cuerpo") : detail));
@@ -1287,18 +1287,24 @@ void ChatController::pollYouTube()
 
         const QJsonDocument document = QJsonDocument::fromJson(bytes);
         if (!document.isObject()) {
+            m_youtubeConnected = false;
+            setConnectedState();
             setStatus(QStringLiteral("YouTube"), QStringLiteral("YouTube devolvió una respuesta que no es JSON válido."));
             m_youtubeTimer.start(10000);
             return;
         }
         const QJsonObject root = document.object();
         if (root.contains(QStringLiteral("error"))) {
+            m_youtubeConnected = false;
+            setConnectedState();
             const QJsonObject apiError = root.value(QStringLiteral("error")).toObject();
             setStatus(QStringLiteral("YouTube"), QStringLiteral("Error InnerTube: %1").arg(apiError.value(QStringLiteral("message")).toString(QStringLiteral("respuesta de error"))));
             m_youtubeTimer.start(15000);
             return;
         }
         parseYouTubeResponse(root);
+        m_youtubeConnected = !m_youtubeContinuation.isEmpty();
+        setConnectedState();
         if (m_youtubeContinuation.isEmpty()) {
             setStatus(QStringLiteral("YouTube"), QStringLiteral("El chat dejó de ofrecer continuaciones; comprobando nuevamente la transmisión."));
             m_youtubeTimer.start(15000);
@@ -1344,6 +1350,7 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
 void ChatController::stopYouTube()
 {
     m_youtubeTimer.stop();
+    m_youtubeConnected = false;
     if (m_youtubeReply) {
         auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
@@ -1351,6 +1358,7 @@ void ChatController::stopYouTube()
         reply->deleteLater();
     }
     m_youtubeContinuation.clear();
+    setConnectedState();
 }
 
 void ChatController::publishMessage(const QString &rawName, const QString &rawText, const QString &platform)

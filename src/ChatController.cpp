@@ -230,6 +230,7 @@ void ChatController::connectAll()
 
 void ChatController::disconnectAll()
 {
+    ++m_connectionGeneration;
     m_stopping = true;
     m_youtubeTimer.stop();
     if (m_youtubeReply) {
@@ -338,13 +339,14 @@ void ChatController::handleTwitchLine(const QString &line, QWebSocket *socket)
 
 void ChatController::connectKick()
 {
+    const quint64 generation = m_connectionGeneration;
     setStatus(QStringLiteral("Kick"), QStringLiteral("Resolviendo el canal..."));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + QString::fromLatin1(QUrl::toPercentEncoding(m_kickChannel)))};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"));
     request.setRawHeader("Accept", "application/json");
     auto *reply = m_network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        if (m_stopping) { reply->deleteLater(); return; }
+    connect(reply, &QNetworkReply::finished, this, [this, reply, generation]() {
+        if (m_stopping || generation != m_connectionGeneration) { reply->deleteLater(); return; }
         const QByteArray bytes = reply->readAll();
         const QString error = reply->errorString();
         const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -366,8 +368,8 @@ void ChatController::connectKick()
         post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         post.setRawHeader("Origin", "https://kick.com");
         auto *connection = m_network.post(post, QJsonDocument(body).toJson(QJsonDocument::Compact));
-        connect(connection, &QNetworkReply::finished, this, [this, connection, clientId]() {
-            if (m_stopping) { connection->deleteLater(); return; }
+        connect(connection, &QNetworkReply::finished, this, [this, connection, clientId, generation]() {
+            if (m_stopping || generation != m_connectionGeneration) { connection->deleteLater(); return; }
             const QByteArray bytes = connection->readAll();
             const int code = connection->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             connection->deleteLater();
@@ -389,8 +391,8 @@ void ChatController::connectKick()
             auth.setRawHeader("Origin", "https://kick.com");
             const QByteArray authBody = QJsonDocument(QJsonObject{{QStringLiteral("client_id"), clientId}}).toJson(QJsonDocument::Compact);
             auto *tokenReply = m_network.post(auth, authBody);
-            connect(tokenReply, &QNetworkReply::finished, this, [this, tokenReply, wsUrl]() {
-                if (m_stopping) { tokenReply->deleteLater(); return; }
+            connect(tokenReply, &QNetworkReply::finished, this, [this, tokenReply, wsUrl, generation]() {
+                if (m_stopping || generation != m_connectionGeneration) { tokenReply->deleteLater(); return; }
                 const QByteArray bytes = tokenReply->readAll();
                 const int code = tokenReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 tokenReply->deleteLater();
@@ -404,7 +406,7 @@ void ChatController::connectKick()
                 m_kickSocket = socket;
                 socket->setProperty("kickToken", token);
                 connect(socket, &QWebSocket::connected, this, [this, socket]() {
-                    if (m_kickSocket != socket || m_stopping) return;
+                    if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
                     socket->sendTextMessage(QStringLiteral("{\"id\":1,\"connect\":{\"token\":\"%1\",\"name\":\"pavotts-native\"}}")
                                                 .arg(jsonEscaped(socket->property("kickToken").toString())));
                     setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticando realtime..."));
@@ -415,14 +417,14 @@ void ChatController::connectKick()
                     if (frame.isObject()) handleKickFrame(frame.object(), socket);
                 });
                 connect(socket, &QWebSocket::disconnected, this, [this, socket]() {
-                    if (m_kickSocket == socket) {
+                    if (m_kickSocket == socket && generation == m_connectionGeneration) {
                         m_kickSocket = nullptr;
                         setStatus(QStringLiteral("Kick"), QStringLiteral("Conexión cerrada."));
                         setConnectedState();
                     }
                 });
                 connect(socket, &QWebSocket::errorOccurred, this, [this, socket](QAbstractSocket::SocketError) {
-                    if (m_kickSocket == socket && !m_stopping)
+                    if (m_kickSocket == socket && !m_stopping && generation == m_connectionGeneration)
                         setStatus(QStringLiteral("Kick"), socket->errorString());
                 });
                 QNetworkRequest wsRequest{QUrl(wsUrl)};

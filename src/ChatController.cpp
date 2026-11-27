@@ -1251,6 +1251,9 @@ void ChatController::connectYouTube()
     setConnectedState();
     m_youtubeSeenIds.clear();
     m_youtubeSeenOrder.clear();
+    m_youtubeRejectedVideoIds.clear();
+    m_youtubeResolvedChannelId.clear();
+    m_youtubeResolvedHandle.clear();
 
     QString channel = m_youtubeChannel.trimmed();
     if (channel.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) ||
@@ -1487,10 +1490,10 @@ void ChatController::requestYouTubeChannelStreams(const QString &channelId)
             m_youtubeContext.insert(QStringLiteral("client"), clientContext);
         }
 
-        const QString videoId = findLiveVideoId(root);
+        const QString videoId = findLiveVideoId(root, m_youtubeRejectedVideoIds);
         if (!videoId.isEmpty()) {
             setStatus(QStringLiteral("YouTube"), QStringLiteral("Directo detectado desde la pestaña de transmisiones (%1); solicitando el chat...").arg(videoId));
-            requestYouTubeInitialContinuation(videoId, false);
+            requestYouTubeInitialContinuation(videoId, true);
             return;
         }
 
@@ -1554,6 +1557,7 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId, b
         if (code < 200 || code >= 300 || !document.isObject()) {
             const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
             if (allowChannelFallback && (!m_youtubeResolvedChannelId.isEmpty() || !m_youtubeResolvedHandle.isEmpty())) {
+                m_youtubeRejectedVideoIds.insert(videoId);
                 setStatus(QStringLiteral("YouTube"), QStringLiteral("/next no pudo abrir el chat; volviendo a descubrir las transmisiones del canal."));
                 if (!m_youtubeResolvedChannelId.isEmpty())
                     requestYouTubeChannelStreams(m_youtubeResolvedChannelId);
@@ -1575,12 +1579,29 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId, b
             clientContext.insert(QStringLiteral("visitorData"), responseVisitor);
             m_youtubeContext.insert(QStringLiteral("client"), clientContext);
         }
+        const QString ownerChannelId = findYouTubeVideoOwnerChannelId(root);
+        if (m_youtubeResolvedChannelId.isEmpty() || ownerChannelId != m_youtubeResolvedChannelId) {
+            m_youtubeRejectedVideoIds.insert(videoId);
+            if (allowChannelFallback && !m_youtubeResolvedChannelId.isEmpty()) {
+                const QString reason = ownerChannelId.isEmpty()
+                    ? QStringLiteral("YouTube no confirmó el dueño del video")
+                    : QStringLiteral("YouTube devolvió un video de otro canal (%1)").arg(ownerChannelId);
+                setStatus(QStringLiteral("YouTube"), reason + QStringLiteral("; descartándolo y probando otro directo del canal configurado."));
+                requestYouTubeChannelStreams(m_youtubeResolvedChannelId);
+                return;
+            }
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("Se rechazó el video %1 porque no se pudo verificar que pertenezca al canal configurado.").arg(videoId));
+            m_youtubeTimer.start(15000);
+            return;
+        }
+
         const QJsonObject liveChat = findLiveChatRenderer(root);
         int initialDelay = 0;
         const QString continuation = findLiveChatContinuation(liveChat, &initialDelay);
         if (liveChat.isEmpty() || continuation.isEmpty()) {
             if (allowChannelFallback && (!m_youtubeResolvedChannelId.isEmpty() || !m_youtubeResolvedHandle.isEmpty())) {
-                setStatus(QStringLiteral("YouTube"), QStringLiteral("El video no entregó chat activo; buscando otro directo del mismo canal."));
+                m_youtubeRejectedVideoIds.insert(videoId);
+                setStatus(QStringLiteral("YouTube"), QStringLiteral("El video del canal correcto no entregó chat activo; probando otro directo de ese canal."));
                 if (!m_youtubeResolvedChannelId.isEmpty())
                     requestYouTubeChannelStreams(m_youtubeResolvedChannelId);
                 else

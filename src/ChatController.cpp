@@ -579,7 +579,8 @@ void ChatController::connectYouTube()
         m_youtubeClientVersion = QRegularExpression(QStringLiteral("\"clientVersion\"\\s*:\\s*\"([^\"]+)\"")).match(html).captured(1);
         m_youtubeContinuation = QRegularExpression(QStringLiteral("\"continuation\"\\s*:\\s*\"([^\"\\\\]+)")).match(html).captured(1);
         if (m_youtubeApiKey.isEmpty() || m_youtubeContinuation.isEmpty()) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se encontró un chat en vivo activo para ese canal."));
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se encontró un chat en vivo activo; reintentando en 30 segundos."));
+            m_youtubeTimer.start(30000);
             return;
         }
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Transmisión detectada; leyendo chat..."));
@@ -591,7 +592,11 @@ void ChatController::connectYouTube()
 
 void ChatController::pollYouTube()
 {
-    if (m_stopping || m_youtubeContinuation.isEmpty()) return;
+    if (m_stopping) return;
+    if (m_youtubeContinuation.isEmpty()) {
+        if (!m_youtubeChannel.isEmpty()) connectYouTube();
+        return;
+    }
     const QString endpoint = QStringLiteral("https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=")
                              + QString::fromLatin1(QUrl::toPercentEncoding(m_youtubeApiKey));
     const QString body = QStringLiteral("{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"%1\",\"hl\":\"es\",\"gl\":\"AR\"}},\"continuation\":\"%2\"}")
@@ -646,8 +651,13 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
         return {};
     };
     const QString next = findContinuation(root);
-    if (!next.isEmpty()) m_youtubeContinuation = next;
-    m_youtubePollDelay = 3000;
+    if (!next.isEmpty()) {
+        m_youtubeContinuation = next;
+        m_youtubePollDelay = 3000;
+    } else {
+        m_youtubeContinuation.clear();
+        m_youtubePollDelay = 30000;
+    }
 }
 
 void ChatController::stopYouTube()

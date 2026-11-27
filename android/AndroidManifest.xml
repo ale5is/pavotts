@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.ale5is.pavotts">
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application android:name="org.qtproject.qt.android.bindings.QtApplication"
+        android:label="PavoTTS" android:usesCleartextTraffic="false">
+        <activity android:name="org.qtproject.qt.android.bindings.QtActivity"
+            android:label="PavoTTS" android:exported="true"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="android.app.lib_name" android:value="PavoTTSNative" />
+        </activity>
+    </application>
+</manifest>

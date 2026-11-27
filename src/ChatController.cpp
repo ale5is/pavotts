@@ -10,6 +10,7 @@
 #include <QUrlQuery>
 #include <QDateTime>
 #include <QRandomGenerator>
+#include <QSslError>
 #include <QUuid>
 #include <functional>
 
@@ -210,6 +211,7 @@ ChatController::ChatController(QObject *parent)
     : QObject(parent), m_player(this), m_audioOutput(this)
 {
     m_player.setAudioOutput(&m_audioOutput);
+    m_network.setTransferTimeout(20000);
     m_audioOutput.setVolume(m_volume);
     connect(&m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus state) {
         if (state == QMediaPlayer::EndOfMedia || state == QMediaPlayer::InvalidMedia)
@@ -474,6 +476,12 @@ void ChatController::connectTwitch()
         setConnectedState();
         scheduleTwitchRetry(QStringLiteral("Conexión cerrada."));
     });
+    connect(socket, &QWebSocket::sslErrors, this, [this, socket](const QList<QSslError> &errors) {
+        if (m_twitchSocket != socket || m_stopping) return;
+        QStringList details;
+        for (const QSslError &error : errors) details.append(error.errorString());
+        setStatus(QStringLiteral("Twitch"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
+    });
     connect(socket, &QWebSocket::errorOccurred, this, [this, socket](QAbstractSocket::SocketError) {
         if (m_twitchSocket == socket && !m_stopping)
             setStatus(QStringLiteral("Twitch"), socket->errorString());
@@ -547,9 +555,16 @@ void ChatController::connectKick()
             ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
             : QStringLiteral("/api/v1/channels/%1").arg(encodedChannel));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com") + lookupPath)};
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
     request.setRawHeader("Accept", "application/json");
+    request.setRawHeader("Origin", "https://kick.com");
+    request.setRawHeader("Referer", "https://kick.com/");
     auto *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError> &errors) {
+        QStringList details;
+        for (const QSslError &error : errors) details.append(error.errorString());
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
+    });
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation]() {
         if (m_stopping || generation != m_connectionGeneration) { reply->deleteLater(); return; }
         const QByteArray bytes = reply->readAll();
@@ -660,6 +675,12 @@ void ChatController::connectKick()
                         scheduleKickRetry(QStringLiteral("Conexión cerrada."));
                     }
                 });
+                connect(socket, &QWebSocket::sslErrors, this, [this, socket, generation](const QList<QSslError> &errors) {
+                    if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
+                    QStringList details;
+                    for (const QSslError &error : errors) details.append(error.errorString());
+                    setStatus(QStringLiteral("Kick"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
+                });
                 connect(socket, &QWebSocket::errorOccurred, this, [this, socket, generation](QAbstractSocket::SocketError) {
                     if (m_kickSocket == socket && !m_stopping && generation == m_connectionGeneration)
                         setStatus(QStringLiteral("Kick"), socket->errorString());
@@ -760,6 +781,11 @@ void ChatController::connectYouTube()
     pageRequest.setRawHeader("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
     pageRequest.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     auto *reply = m_network.get(pageRequest);
+    connect(reply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError> &errors) {
+        QStringList details;
+        for (const QSslError &error : errors) details.append(error.errorString());
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
+    });
     m_youtubeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
@@ -838,6 +864,10 @@ void ChatController::pollYouTube()
     request.setRawHeader("Referer", "https://www.youtube.com/");
     request.setRawHeader("X-YouTube-Client-Name", "1");
     request.setRawHeader("X-YouTube-Client-Version", m_youtubeClientVersion.toUtf8());
+    const QString visitorData = m_youtubeContext.value(QStringLiteral("client")).toObject()
+                                    .value(QStringLiteral("visitorData")).toString();
+    if (!visitorData.isEmpty())
+        request.setRawHeader("X-Goog-Visitor-Id", visitorData.toUtf8());
 
     auto *reply = m_network.post(request, QJsonDocument(requestBody).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;

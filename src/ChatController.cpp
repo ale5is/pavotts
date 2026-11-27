@@ -94,6 +94,35 @@ ChatController::ChatController(QObject *parent)
     });
     m_youtubeTimer.setSingleShot(true);
     connect(&m_youtubeTimer, &QTimer::timeout, this, &ChatController::pollYouTube);
+    m_twitchRetryTimer.setSingleShot(true);
+    connect(&m_twitchRetryTimer, &QTimer::timeout, this, [this]() {
+        if (!m_stopping && !m_twitchRejected && !m_twitchSocket && !m_twitchChannel.isEmpty()) connectTwitch();
+    });
+    m_kickRetryTimer.setSingleShot(true);
+    connect(&m_kickRetryTimer, &QTimer::timeout, this, [this]() {
+        if (!m_stopping && !m_kickSocket && !m_kickChannel.isEmpty()) connectKick();
+    });
+    m_twitchHandshakeTimer.setSingleShot(true);
+    connect(&m_twitchHandshakeTimer, &QTimer::timeout, this, [this]() {
+        if (!m_stopping && m_twitchSocket && !m_twitchAuthenticated) {
+            setStatus(QStringLiteral("Twitch"), QStringLiteral("No se confirmó el inicio de sesión en 15 segundos; reconectando."));
+            m_twitchSocket->close();
+        }
+    });
+    m_kickHandshakeTimer.setSingleShot(true);
+    connect(&m_kickHandshakeTimer, &QTimer::timeout, this, [this]() {
+        if (!m_stopping && m_kickSocket && !m_kickSubscribed) {
+            setStatus(QStringLiteral("Kick"), QStringLiteral("No se confirmó la suscripción en 20 segundos; reconectando."));
+            m_kickSocket->close();
+        }
+    });
+    m_kickLeaseTimer.setSingleShot(true);
+    connect(&m_kickLeaseTimer, &QTimer::timeout, this, [this]() {
+        if (!m_stopping && m_kickSocket) {
+            setStatus(QStringLiteral("Kick"), QStringLiteral("Renovando el token temporal."));
+            m_kickSocket->close();
+        }
+    });
     loadSettings();
 }
 
@@ -197,7 +226,7 @@ void ChatController::setStatus(const QString &platform, const QString &message)
 
 void ChatController::setConnectedState()
 {
-    const bool now = !m_stopping && (m_twitchSocket || m_kickSocket || !m_youtubeContinuation.isEmpty());
+    const bool now = !m_stopping && ((m_twitchSocket && m_twitchAuthenticated) || (m_kickSocket && m_kickSubscribed) || !m_youtubeContinuation.isEmpty());
     if (m_connected != now) {
         m_connected = now;
         emit connectionChanged();
@@ -208,6 +237,7 @@ void ChatController::connectAll()
 {
     disconnectAll();
     m_stopping = false;
+    m_twitchRejected = false; m_twitchRetryDelay = 3000; m_kickRetryDelay = 3000;
     saveSettings();
     bool any = false;
     if (!m_twitchChannel.isEmpty() && !m_twitchUsername.isEmpty() && !m_twitchToken.isEmpty()) {
@@ -233,6 +263,9 @@ void ChatController::disconnectAll()
     ++m_connectionGeneration;
     m_stopping = true;
     m_youtubeTimer.stop();
+    m_twitchRetryTimer.stop(); m_kickRetryTimer.stop();
+    m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
+    m_twitchAuthenticated = false; m_kickSubscribed = false;
     if (m_youtubeReply) {
         auto *reply = m_youtubeReply;
         m_youtubeReply = nullptr;
@@ -267,8 +300,20 @@ void ChatController::disconnectAll()
     setStatus(QStringLiteral("Chat"), QStringLiteral("Desconectado."));
 }
 
+void ChatController::scheduleTwitchRetry(const QString &reason)
+{
+    if (m_stopping || m_twitchRejected || m_twitchRetryTimer.isActive() || m_twitchChannel.isEmpty())
+        return;
+    setStatus(QStringLiteral("Twitch"), reason + QStringLiteral(" Reintentando en %1 s.").arg(m_twitchRetryDelay / 1000));
+    m_twitchRetryTimer.start(m_twitchRetryDelay);
+    m_twitchRetryDelay = qMin(m_twitchRetryDelay * 2, 30000);
+}
+
 void ChatController::connectTwitch()
 {
+    m_twitchRetryTimer.stop();
+    m_twitchHandshakeTimer.stop();
+    m_twitchAuthenticated = false;
     auto *socket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
     m_twitchSocket = socket;
     connect(socket, &QWebSocket::connected, this, [this, socket]() {
@@ -278,7 +323,7 @@ void ChatController::connectTwitch()
         socket->sendTextMessage(QStringLiteral("NICK %1\r\n").arg(m_twitchUsername));
         socket->sendTextMessage(QStringLiteral("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n"));
         socket->sendTextMessage(QStringLiteral("JOIN #%1\r\n").arg(m_twitchChannel));
-        setConnectedState();
+        m_twitchHandshakeTimer.start(15000);
     });
     connect(socket, &QWebSocket::textMessageReceived, this, [this, socket](const QString &chunk) {
         if (m_twitchSocket != socket || m_stopping) return;
@@ -293,11 +338,12 @@ void ChatController::connectTwitch()
         }
     });
     connect(socket, &QWebSocket::disconnected, this, [this, socket]() {
-        if (m_twitchSocket == socket) {
-            m_twitchSocket = nullptr;
-            setStatus(QStringLiteral("Twitch"), QStringLiteral("Conexión cerrada."));
-            setConnectedState();
-        }
+        if (m_twitchSocket != socket) return;
+        m_twitchSocket = nullptr;
+        m_twitchAuthenticated = false;
+        m_twitchHandshakeTimer.stop();
+        setConnectedState();
+        scheduleTwitchRetry(QStringLiteral("Conexión cerrada."));
     });
     connect(socket, &QWebSocket::errorOccurred, this, [this, socket](QAbstractSocket::SocketError) {
         if (m_twitchSocket == socket && !m_stopping)
@@ -314,9 +360,18 @@ void ChatController::handleTwitchLine(const QString &line, QWebSocket *socket)
         return;
     }
     if (line.contains(QStringLiteral("Login authentication failed"))) {
-        setStatus(QStringLiteral("Twitch"), QStringLiteral("Token rechazado (verificá chat:read)."));
+        m_twitchRejected = true;
+        m_twitchHandshakeTimer.stop();
+        setStatus(QStringLiteral("Twitch"), QStringLiteral("Token rechazado; revisá el permiso chat:read."));
         socket->close();
         return;
+    }
+    if (line.contains(QStringLiteral(" 001 "))) {
+        m_twitchAuthenticated = true;
+        m_twitchHandshakeTimer.stop();
+        m_twitchRetryDelay = 3000;
+        setStatus(QStringLiteral("Twitch"), QStringLiteral("Autenticado y conectado."));
+        setConnectedState();
     }
     const int marker = line.indexOf(QStringLiteral(" PRIVMSG "));
     if (marker < 0) return;

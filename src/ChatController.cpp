@@ -283,6 +283,7 @@ void ChatController::disconnectAll()
     m_twitchRetryTimer.stop(); m_kickRetryTimer.stop();
     m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
     m_twitchAuthenticated = false; m_kickSubscribed = false;
+    m_twitchBuffer.clear();
     if (m_youtubeReply) {
         auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
@@ -332,6 +333,7 @@ void ChatController::scheduleTwitchRetry(const QString &reason)
 
 void ChatController::connectTwitch()
 {
+    m_twitchBuffer.clear();
     m_twitchRetryTimer.stop();
     m_twitchHandshakeTimer.stop();
     m_twitchAuthenticated = false;

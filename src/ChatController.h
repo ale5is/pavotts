@@ -92,7 +92,7 @@ private:
     void scheduleTwitchRetry(const QString &reason);
     QString m_status = QStringLiteral("Ingresá los datos y presioná CONECTAR.");
     QVariantList m_messages;
-    QString m_youtubeChannel, m_kickChannel, m_sessionId;
+    QString m_twitchChannel, m_youtubeChannel, m_kickChannel, m_sessionId;
     QString m_voice = QStringLiteral("es_002"), m_character, m_commandPrefix;
     double m_volume = 1.0;
     QSet<QString> m_blacklist;

@@ -775,6 +775,7 @@ void ChatController::connectKick()
         const QByteArray bytes = reply->readAll();
         const QString error = reply->errorString();
         const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QString responseDetail = QString::fromUtf8(bytes.left(400)).simplified();
         const QJsonDocument doc = QJsonDocument::fromJson(bytes);
         reply->deleteLater();
         if (!doc.isObject() || code < 200 || code >= 300) {
@@ -783,7 +784,8 @@ void ChatController::connectKick()
                 connectKick();
             } else {
                 m_kickLookupAttempt = 0;
-                scheduleKickRetry(QStringLiteral("No se pudo resolver el canal: ") + error + QStringLiteral(" (HTTP %1)").arg(code));
+                scheduleKickRetry(QStringLiteral("No se pudo resolver el canal: %1 (HTTP %2). Respuesta: %3")
+                                       .arg(error).arg(code).arg(responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
             }
             return;
         }
@@ -798,13 +800,15 @@ void ChatController::connectKick()
                   .value(QStringLiteral("id")).toVariant().toString();
         bool roomOk = false;
         const int room = roomText.toInt(&roomOk);
-        if (!roomOk || room <= 0) {
+        bool channelOk = false;
+        const qlonglong channelId = channelText.toLongLong(&channelOk);
+        if (!roomOk || room <= 0 || !channelOk || channelId <= 0) {
             if (m_kickLookupAttempt < 2) {
                 ++m_kickLookupAttempt;
                 connectKick();
             } else {
                 m_kickLookupAttempt = 0;
-                scheduleKickRetry(QStringLiteral("Las tres rutas de Kick no devolvieron un chatroom ID."));
+                scheduleKickRetry(QStringLiteral("Las rutas de Kick no devolvieron IDs numéricos válidos de canal y chatroom."));
             }
             return;
         }
@@ -830,10 +834,12 @@ void ChatController::connectKick()
             if (m_stopping || generation != m_connectionGeneration) { connection->deleteLater(); return; }
             const QByteArray bytes = connection->readAll();
             const int code = connection->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QString responseDetail = QString::fromUtf8(bytes.left(400)).simplified();
             connection->deleteLater();
             const QJsonDocument data = QJsonDocument::fromJson(bytes);
             if (!data.isObject() || code < 200 || code >= 300) {
-                scheduleKickRetry(QStringLiteral("Falló la negociación realtime (HTTP %1).").arg(code));
+                scheduleKickRetry(QStringLiteral("Falló la negociación realtime (HTTP %1). Respuesta: %2")
+                                      .arg(code).arg(responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
                 return;
             }
             QString wsUrl;
@@ -843,7 +849,11 @@ void ChatController::connectKick()
                 if (candidate.value(QStringLiteral("provider")).toString() == QStringLiteral("centrifugo"))
                     wsUrl = candidate.value(QStringLiteral("credentials")).toObject().value(QStringLiteral("url")).toString();
             }
-            if (wsUrl.isEmpty()) { scheduleKickRetry(QStringLiteral("No se ofreció endpoint Centrifugo.")); return; }
+            const QUrl realtimeUrl(wsUrl);
+            if (realtimeUrl.scheme() != QStringLiteral("wss") || realtimeUrl.host().isEmpty()) {
+                scheduleKickRetry(QStringLiteral("Kick devolvió un endpoint Centrifugo inválido: %1").arg(wsUrl.left(180)));
+                return;
+            }
             QNetworkRequest auth{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/auth/connection"))};
             auth.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
             auth.setRawHeader("Origin", "https://kick.com");
@@ -856,11 +866,13 @@ void ChatController::connectKick()
                 if (m_stopping || generation != m_connectionGeneration) { tokenReply->deleteLater(); return; }
                 const QByteArray bytes = tokenReply->readAll();
                 const int code = tokenReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                const QString responseDetail = QString::fromUtf8(bytes.left(400)).simplified();
                 tokenReply->deleteLater();
                 const QJsonDocument tokenDoc = QJsonDocument::fromJson(bytes);
                 const QString token = tokenDoc.object().value(QStringLiteral("data")).toObject().value(QStringLiteral("token")).toString();
                 if (code < 200 || code >= 300 || token.isEmpty()) {
-                    scheduleKickRetry(QStringLiteral("No se pudo obtener el token realtime (HTTP %1).").arg(code));
+                    scheduleKickRetry(QStringLiteral("No se pudo obtener el token realtime (HTTP %1). Respuesta: %2")
+                                          .arg(code).arg(responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
                     return;
                 }
                 auto *socket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
@@ -931,7 +943,12 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         return;
     }
     if (frame.contains(QStringLiteral("error"))) {
-        setStatus(QStringLiteral("Kick"), QStringLiteral("Error de protocolo realtime."));
+        const QJsonObject error = frame.value(QStringLiteral("error")).toObject();
+        const QString message = error.value(QStringLiteral("message")).toString(
+            error.value(QStringLiteral("reason")).toString(QStringLiteral("error sin descripción")));
+        const QString code = error.value(QStringLiteral("code")).toVariant().toString();
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Error Centrifugo %1: %2")
+                      .arg(code.isEmpty() ? QStringLiteral("(sin código)") : code, message.left(240)));
         socket->close();
         return;
     }
@@ -939,7 +956,6 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         const QString subscription = QStringLiteral("{\"id\":2,\"subscribe\":{\"channel\":\"chatrooms.%1.v2\"}}").arg(m_kickChatroomId);
         socket->sendTextMessage(subscription);
         setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticado; suscribiendo al chat..."));
-        setConnectedState();
         return;
     }
     if (frame.value(QStringLiteral("id")).toInt() == 2 && frame.contains(QStringLiteral("subscribe"))) {

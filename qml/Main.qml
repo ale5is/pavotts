@@ -126,12 +126,23 @@ ApplicationWindow {
             }
         }
 
-        Label {
+        ColumnLayout {
             Layout.fillWidth: true
-            text: chat.status
-            color: "#9fb2ca"
-            wrapMode: Text.Wrap
-            font.pixelSize: 12
+            spacing: 3
+            Label {
+                Layout.fillWidth: true
+                text: chat.status
+                color: "#9fb2ca"
+                wrapMode: Text.Wrap
+                font.pixelSize: 12
+            }
+            Label {
+                Layout.fillWidth: true
+                text: "Twitch: " + chat.twitchStatus + "   |   Kick: " + chat.kickStatus + "   |   YouTube: " + chat.youtubeStatus
+                color: "#7f91a8"
+                wrapMode: Text.Wrap
+                font.pixelSize: 10
+            }
         }
 
         StackLayout {

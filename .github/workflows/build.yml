@@ -19,7 +19,7 @@ jobs:
           version: 6.8.3
           host: linux
           target: desktop
-          arch: gcc_64
+          arch: linux_gcc_64
           modules: qtmultimedia qtwebsockets
           cache: true
       - run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev

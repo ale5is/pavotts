@@ -184,7 +184,7 @@ void ChatController::loadSettings()
     m_sessionId = o.value("sessionId").toString();
     m_voice = o.value("voz").toString("es_002");
     m_character = o.value("caracter").toString();
-    m_commandPrefix = o.value("prefijo").toString("*");
+    m_commandPrefix = o.value("prefijo").toString();
     m_volume = qBound(0.0, o.value("volumen").toDouble(1.0), 1.0);
     const QStringList blocked = o.value("blacklist").toString().split(',', Qt::SkipEmptyParts);
     for (const QString &name : blocked)

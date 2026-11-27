@@ -1298,6 +1298,78 @@ void ChatController::connectYouTube()
 }
 
 
+void ChatController::requestYouTubeResolveChannel(const QString &handle)
+{
+    if (m_stopping || handle.isEmpty())
+        return;
+
+    QUrl endpoint(QStringLiteral("https://www.youtube.com/youtubei/v1/navigation/resolve_url"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("key"), m_youtubeApiKey);
+    query.addQueryItem(QStringLiteral("prettyPrint"), QStringLiteral("false"));
+    endpoint.setQuery(query);
+
+    const QJsonObject body{
+        {QStringLiteral("context"), m_youtubeContext},
+        {QStringLiteral("url"), QStringLiteral("https://www.youtube.com/@") + handle}
+    };
+    QNetworkRequest request{endpoint};
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36"));
+    request.setRawHeader("Origin", "https://www.youtube.com");
+    request.setRawHeader("Referer", (QStringLiteral("https://www.youtube.com/@") + handle).toUtf8());
+    request.setRawHeader("X-YouTube-Client-Name", "1");
+    request.setRawHeader("X-YouTube-Client-Version", m_youtubeClientVersion.toUtf8());
+    const QString visitorData = m_youtubeContext.value(QStringLiteral("client")).toObject()
+                                    .value(QStringLiteral("visitorData")).toString();
+    if (!visitorData.isEmpty())
+        request.setRawHeader("X-Goog-Visitor-Id", visitorData.toUtf8());
+
+    auto *reply = m_network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    m_youtubeReply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, handle]() {
+        if (m_stopping || m_youtubeReply != reply) {
+            reply->deleteLater();
+            return;
+        }
+        const QByteArray bytes = reply->readAll();
+        const QString error = reply->errorString();
+        const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        reply->deleteLater();
+        m_youtubeReply = nullptr;
+
+        const QJsonDocument document = QJsonDocument::fromJson(bytes);
+        if (code < 200 || code >= 300 || !document.isObject()) {
+            const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo resolver el handle @%1 (HTTP %2): %3. Respuesta: %4")
+                          .arg(handle).arg(code).arg(error)
+                          .arg(detail.isEmpty() ? QStringLiteral("sin cuerpo") : detail));
+            m_youtubeTimer.start(15000);
+            return;
+        }
+
+        const QJsonObject root = document.object();
+        const QString channelId = root.value(QStringLiteral("endpoint")).toObject()
+                                     .value(QStringLiteral("browseEndpoint")).toObject()
+                                     .value(QStringLiteral("browseId")).toString();
+        if (!isYouTubeChannelId(channelId)) {
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("InnerTube no devolvió un browseId de canal válido para @%1.").arg(handle));
+            m_youtubeTimer.start(30000);
+            return;
+        }
+
+        QJsonObject clientContext = m_youtubeContext.value(QStringLiteral("client")).toObject();
+        const QString responseVisitor = root.value(QStringLiteral("responseContext")).toObject()
+                                            .value(QStringLiteral("visitorData")).toString();
+        if (!responseVisitor.isEmpty()) {
+            clientContext.insert(QStringLiteral("visitorData"), responseVisitor);
+            m_youtubeContext.insert(QStringLiteral("client"), clientContext);
+        }
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("Canal @%1 resuelto; buscando sus transmisiones...").arg(handle));
+        requestYouTubeChannelStreams(channelId);
+    });
+}
+
 void ChatController::requestYouTubeChannelStreams(const QString &channelId)
 {
     if (m_stopping || channelId.isEmpty())

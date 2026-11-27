@@ -392,8 +392,21 @@ void ChatController::handleTwitchLine(const QString &line, QWebSocket *socket)
     if (body >= 0) publishMessage(name, line.mid(body + 2), QStringLiteral("Twitch"));
 }
 
+void ChatController::scheduleKickRetry(const QString &reason)
+{
+    if (m_stopping || m_kickRetryTimer.isActive() || m_kickChannel.isEmpty())
+        return;
+    setStatus(QStringLiteral("Kick"), reason + QStringLiteral(" Reintentando en %1 s.").arg(m_kickRetryDelay / 1000));
+    m_kickRetryTimer.start(m_kickRetryDelay);
+    m_kickRetryDelay = qMin(m_kickRetryDelay * 2, 30000);
+}
+
 void ChatController::connectKick()
 {
+    m_kickRetryTimer.stop();
+    m_kickHandshakeTimer.stop();
+    m_kickLeaseTimer.stop();
+    m_kickSubscribed = false;
     const quint64 generation = m_connectionGeneration;
     setStatus(QStringLiteral("Kick"), QStringLiteral("Resolviendo el canal..."));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + QString::fromLatin1(QUrl::toPercentEncoding(m_kickChannel)))};
@@ -408,11 +421,11 @@ void ChatController::connectKick()
         const QJsonDocument doc = QJsonDocument::fromJson(bytes);
         reply->deleteLater();
         if (!doc.isObject() || code < 200 || code >= 300) {
-            setStatus(QStringLiteral("Kick"), QStringLiteral("No se pudo resolver el canal: ") + error + QStringLiteral(" (HTTP %1)").arg(code));
+            scheduleKickRetry(QStringLiteral("No se pudo resolver el canal: ") + error + QStringLiteral(" (HTTP %1)").arg(code));
             return;
         }
         const int room = doc.object().value(QStringLiteral("chatroom")).toObject().value(QStringLiteral("id")).toInt();
-        if (room <= 0) { setStatus(QStringLiteral("Kick"), QStringLiteral("No se obtuvo chatroom ID.")); return; }
+        if (room <= 0) { scheduleKickRetry(QStringLiteral("No se obtuvo chatroom ID.")); return; }
         m_kickChatroomId = QString::number(room);
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
@@ -430,7 +443,7 @@ void ChatController::connectKick()
             connection->deleteLater();
             const QJsonDocument data = QJsonDocument::fromJson(bytes);
             if (!data.isObject() || code < 200 || code >= 300) {
-                setStatus(QStringLiteral("Kick"), QStringLiteral("Falló la negociación realtime (HTTP %1).").arg(code));
+                scheduleKickRetry(QStringLiteral("Falló la negociación realtime (HTTP %1).").arg(code));
                 return;
             }
             QString wsUrl;
@@ -440,7 +453,7 @@ void ChatController::connectKick()
                 if (candidate.value(QStringLiteral("provider")).toString() == QStringLiteral("centrifugo"))
                     wsUrl = candidate.value(QStringLiteral("credentials")).toObject().value(QStringLiteral("url")).toString();
             }
-            if (wsUrl.isEmpty()) { setStatus(QStringLiteral("Kick"), QStringLiteral("No se ofreció endpoint Centrifugo.")); return; }
+            if (wsUrl.isEmpty()) { scheduleKickRetry(QStringLiteral("No se ofreció endpoint Centrifugo.")); return; }
             QNetworkRequest auth{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/auth/connection"))};
             auth.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
             auth.setRawHeader("Origin", "https://kick.com");
@@ -454,7 +467,7 @@ void ChatController::connectKick()
                 const QJsonDocument tokenDoc = QJsonDocument::fromJson(bytes);
                 const QString token = tokenDoc.object().value(QStringLiteral("data")).toObject().value(QStringLiteral("token")).toString();
                 if (code < 200 || code >= 300 || token.isEmpty()) {
-                    setStatus(QStringLiteral("Kick"), QStringLiteral("No se pudo obtener el token realtime (HTTP %1).").arg(code));
+                    scheduleKickRetry(QStringLiteral("No se pudo obtener el token realtime (HTTP %1).").arg(code));
                     return;
                 }
                 auto *socket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
@@ -465,6 +478,7 @@ void ChatController::connectKick()
                     socket->sendTextMessage(QStringLiteral("{\"id\":1,\"connect\":{\"token\":\"%1\",\"name\":\"pavotts-native\"}}")
                                                 .arg(jsonEscaped(socket->property("kickToken").toString())));
                     setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticando realtime..."));
+                    m_kickHandshakeTimer.start(20000);
                 });
                 connect(socket, &QWebSocket::textMessageReceived, this, [this, socket, generation](const QString &text) {
                     if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
@@ -474,8 +488,11 @@ void ChatController::connectKick()
                 connect(socket, &QWebSocket::disconnected, this, [this, socket, generation]() {
                     if (m_kickSocket == socket && generation == m_connectionGeneration) {
                         m_kickSocket = nullptr;
-                        setStatus(QStringLiteral("Kick"), QStringLiteral("Conexión cerrada."));
+                        m_kickSubscribed = false;
+                        m_kickHandshakeTimer.stop();
+                        m_kickLeaseTimer.stop();
                         setConnectedState();
+                        scheduleKickRetry(QStringLiteral("Conexión cerrada."));
                     }
                 });
                 connect(socket, &QWebSocket::errorOccurred, this, [this, socket, generation](QAbstractSocket::SocketError) {
@@ -506,7 +523,12 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         return;
     }
     if (frame.value(QStringLiteral("id")).toInt() == 2 && frame.contains(QStringLiteral("subscribe"))) {
+        m_kickSubscribed = true;
+        m_kickHandshakeTimer.stop();
+        m_kickRetryDelay = 3000;
+        m_kickLeaseTimer.start(35 * 60 * 1000);
         setStatus(QStringLiteral("Kick"), QStringLiteral("Chat conectado."));
+        setConnectedState();
         return;
     }
     const QJsonObject push = frame.value(QStringLiteral("push")).toObject();

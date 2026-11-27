@@ -75,3 +75,14 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
 datos.config
+build/
+build-*/
+cmake-build-*/
+out/
+*.apk
+*.aab
+*.so
+*.dll
+*.dylib
+*.exe
+datos.config

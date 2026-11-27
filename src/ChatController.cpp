@@ -77,8 +77,16 @@ QJsonObject extractEmbeddedObject(const QString &html, const QStringList &marker
 QJsonObject findLiveChatRenderer(const QJsonValue &value)
 {
     if (value.isObject()) {
-        const QJsonObject object = value.toObject();
-        for (auto it = object.begin(); it != object.end(); ++it) {
+        const QJsonObject root = value.toObject();
+        const QJsonObject primary = root.value(QStringLiteral("contents")).toObject()
+            .value(QStringLiteral("twoColumnWatchNextResults")).toObject()
+            .value(QStringLiteral("conversationBar")).toObject()
+            .value(QStringLiteral("liveChatRenderer")).toObject();
+        if (primary.contains(QStringLiteral("continuations"))
+            && !primary.value(QStringLiteral("isReplay")).toBool())
+            return primary;
+
+        for (auto it = root.begin(); it != root.end(); ++it) {
             if (it.key() == QStringLiteral("liveChatRenderer") && it.value().isObject()) {
                 const QJsonObject renderer = it.value().toObject();
                 if (renderer.contains(QStringLiteral("continuations"))
@@ -1095,7 +1103,9 @@ void ChatController::connectYouTube()
         m_youtubeReply = nullptr;
 
         if (code < 200 || code >= 400 || response.isEmpty()) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo abrir el canal (HTTP %1): %2").arg(code).arg(error));
+            const QString detail = QString::fromUtf8(response.left(300)).simplified();
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo abrir el canal (HTTP %1): %2. Respuesta: %3")
+                          .arg(code).arg(error).arg(detail.isEmpty() ? QStringLiteral("sin cuerpo") : detail));
             m_youtubeTimer.start(30000);
             return;
         }
@@ -1192,12 +1202,21 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
 
         const QJsonDocument document = QJsonDocument::fromJson(bytes);
         if (code < 200 || code >= 300 || !document.isObject()) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo obtener la continuación desde /next (HTTP %1): %2").arg(code).arg(error));
+            const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo obtener la continuación desde /next (HTTP %1): %2. Respuesta: %3")
+                          .arg(code).arg(error).arg(detail.isEmpty() ? QStringLiteral("sin cuerpo") : detail));
             m_youtubeTimer.start(15000);
             return;
         }
 
         const QJsonObject root = document.object();
+        QJsonObject clientContext = m_youtubeContext.value(QStringLiteral("client")).toObject();
+        const QString responseVisitor = root.value(QStringLiteral("responseContext")).toObject()
+                                            .value(QStringLiteral("visitorData")).toString();
+        if (!responseVisitor.isEmpty()) {
+            clientContext.insert(QStringLiteral("visitorData"), responseVisitor);
+            m_youtubeContext.insert(QStringLiteral("client"), clientContext);
+        }
         const QJsonObject liveChat = findLiveChatRenderer(root);
         int initialDelay = 0;
         const QString continuation = findLiveChatContinuation(liveChat, &initialDelay);
@@ -1259,7 +1278,9 @@ void ChatController::pollYouTube()
         m_youtubeReply = nullptr;
 
         if (failed) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("InnerTube rechazó la consulta (HTTP %1): %2").arg(code).arg(error));
+            const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("InnerTube rechazó la consulta (HTTP %1): %2. Respuesta: %3")
+                          .arg(code).arg(error).arg(detail.isEmpty() ? QStringLiteral("sin cuerpo") : detail));
             m_youtubeTimer.start(10000);
             return;
         }

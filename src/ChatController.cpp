@@ -587,7 +587,8 @@ void ChatController::connectYouTube()
         reply->deleteLater();
         m_youtubeReply = nullptr;
         if (code < 200 || code >= 400) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo abrir el canal (HTTP %1).").arg(code));
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo abrir el canal (HTTP %1); reintentando en 30 segundos.").arg(code));
+            m_youtubeTimer.start(30000);
             return;
         }
         m_youtubeApiKey = QRegularExpression(QStringLiteral("\"INNERTUBE_API_KEY\"\\s*:\\s*\"([^\"]+)\"")).match(html).captured(1);
@@ -752,6 +753,7 @@ void ChatController::requestSpeech(const QString &text)
     url.setQuery(query);
     QNetworkRequest request{url};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("com.zhiliaoapp.musically/2022600030 (Linux; U; Android 7.1.2; es_ES; SM-G988N; Build/NRD90M;tt-ok/3.12.13.1)"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     request.setRawHeader("Cookie", QByteArray("sessionid=") + m_sessionId.toUtf8());
     auto *reply = m_network.post(request, QByteArray());
     m_ttsReply = reply;

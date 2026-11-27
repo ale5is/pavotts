@@ -94,7 +94,7 @@ private:
     void handleKickFrame(const QJsonObject &frame, QWebSocket *socket);
     void requestYouTubeResolveChannel(const QString &handle);
     void requestYouTubeChannelStreams(const QString &channelId);
-    void requestYouTubeInitialContinuation(const QString &videoId);
+    void requestYouTubeInitialContinuation(const QString &videoId, bool allowChannelFallback = true);
     void pollYouTube();
     void parseYouTubeResponse(const QJsonObject &root);
     void stopYouTube();
@@ -116,6 +116,7 @@ private:
     QTimer m_youtubeTimer, m_twitchRetryTimer, m_kickRetryTimer, m_twitchHandshakeTimer, m_kickHandshakeTimer, m_kickLeaseTimer, m_kickHeartbeatTimer;
     QElapsedTimer m_kickLastActivity;
     QString m_twitchBuffer, m_kickChannelId, m_kickChatroomId, m_youtubeApiKey, m_youtubeClientVersion, m_youtubeContinuation;
+    QString m_youtubeResolvedChannelId, m_youtubeResolvedHandle;
     QJsonObject m_youtubeContext;
     int m_kickLookupAttempt = 0;
     QSet<QString> m_youtubeSeenIds;

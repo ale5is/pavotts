@@ -375,6 +375,7 @@ void ChatController::connectAll()
     disconnectAll();
     m_stopping = false;
     m_twitchRejected = false; m_twitchRetryDelay = 3000; m_kickRetryDelay = 3000; m_kickLookupAttempt = 0;
+    m_kickChannelId.clear(); m_kickChatroomId.clear();
     m_messages.clear();
     emit messagesChanged();
     saveSettings();

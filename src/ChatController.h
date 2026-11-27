@@ -100,7 +100,7 @@ private:
     QVariantList m_messages;
     QString m_twitchChannel, m_twitchUsername, m_twitchToken;
     QString m_youtubeChannel, m_kickChannel, m_sessionId;
-    QString m_voice = QStringLiteral("es_002"), m_character, m_commandPrefix = QStringLiteral("*");
+    QString m_voice = QStringLiteral("es_002"), m_character, m_commandPrefix;
     double m_volume = 1.0;
     QSet<QString> m_blacklist;
     QNetworkAccessManager m_network;

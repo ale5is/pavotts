@@ -1217,7 +1217,7 @@ void ChatController::connectYouTube()
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
     });
     m_youtubeReply = reply;
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, channel]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
         const QByteArray response = reply->readAll();
         const QString error = reply->errorString();
@@ -1275,10 +1275,16 @@ void ChatController::connectYouTube()
                 pollYouTube();
                 return;
             }
-            const QString channelId = findYouTubeChannelId(initialData);
-            if (!channelId.isEmpty()) {
+            QString channelId = findYouTubeChannelId(initialData);
+            if (channelId.isEmpty() && channel.startsWith(QStringLiteral("channel/")))
+                channelId = channel.mid(QStringLiteral("channel/").size());
+            if (!channelId.isEmpty() && isYouTubeChannelId(channelId)) {
                 setStatus(QStringLiteral("YouTube"), QStringLiteral("Buscando directos en la pestaña de transmisiones del canal..."));
                 requestYouTubeChannelStreams(channelId);
+                return;
+            }
+            if (channel.startsWith(QLatin1Char('@'))) {
+                requestYouTubeResolveChannel(channel.mid(1));
                 return;
             }
             setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo resolver el ID del canal ni encontrar un video LIVE en la página."));

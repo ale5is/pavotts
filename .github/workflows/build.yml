@@ -22,6 +22,7 @@ jobs:
           arch: linux_gcc_64
           modules: qtmultimedia qtwebsockets
           cache: true
+          install-deps: false
       - run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --config Release --parallel
@@ -82,8 +83,33 @@ jobs:
           QT_CMAKE="$(find "$QT_ROOT_DIR" -type f -name qt-cmake | head -n 1)"
           test -n "$QT_CMAKE"
           "$QT_CMAKE" -S . -B build-android -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" -DANDROID_NDK_ROOT="$ANDROID_NDK_ROOT" -DQT_ANDROID_DEPLOYMENT_TYPE=Debug
+      - name: Configure Gradle dependency mirror
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cat > "$HOME/.gradle/init.d/maven-fallback.gradle" <<'EOF'
+          allprojects {
+              repositories {
+                  maven {
+                      name = "MavenCentralGoogleMirror"
+                      url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+                  }
+              }
+          }
+          EOF
       - name: Build Android
-        run: cmake --build build-android --target apk --config Release --parallel
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if cmake --build build-android --target apk --config Release --parallel; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Android dependency resolution/build failed; retrying in 20 seconds (attempt $attempt/3)."
+              sleep 20
+            fi
+          done
+          exit 1
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

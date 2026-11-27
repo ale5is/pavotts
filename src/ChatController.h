@@ -17,6 +17,9 @@ class ChatController final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
+    Q_PROPERTY(QString twitchStatus READ twitchStatus NOTIFY platformStatusesChanged)
+    Q_PROPERTY(QString kickStatus READ kickStatus NOTIFY platformStatusesChanged)
+    Q_PROPERTY(QString youtubeStatus READ youtubeStatus NOTIFY platformStatusesChanged)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY messagesChanged)
     Q_PROPERTY(QString twitchChannel READ twitchChannel WRITE setTwitchChannel NOTIFY settingsChanged)
     Q_PROPERTY(QString youtubeChannel READ youtubeChannel WRITE setYoutubeChannel NOTIFY settingsChanged)
@@ -34,6 +37,9 @@ public:
     explicit ChatController(QObject *parent = nullptr);
     ~ChatController() override;
     QString status() const;
+    QString twitchStatus() const;
+    QString kickStatus() const;
+    QString youtubeStatus() const;
     QVariantList messages() const;
     QString twitchChannel() const;
     QString youtubeChannel() const;
@@ -67,6 +73,7 @@ public:
     Q_INVOKABLE QString oauthHelp() const;
 signals:
     void statusChanged();
+    void platformStatusesChanged();
     void messagesChanged();
     void settingsChanged();
     void connectionChanged();
@@ -91,6 +98,9 @@ private:
     void scheduleKickRetry(const QString &reason);
     void scheduleTwitchRetry(const QString &reason);
     QString m_status = QStringLiteral("Ingresá los datos y presioná CONECTAR.");
+    QString m_twitchStatus = QStringLiteral("Sin iniciar.");
+    QString m_kickStatus = QStringLiteral("Sin iniciar.");
+    QString m_youtubeStatus = QStringLiteral("Sin iniciar.");
     QVariantList m_messages;
     QString m_twitchChannel, m_youtubeChannel, m_kickChannel, m_sessionId;
     QString m_voice = QStringLiteral("es_002"), m_character, m_commandPrefix;

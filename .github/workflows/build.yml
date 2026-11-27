@@ -24,16 +24,26 @@ jobs:
           cache: true
           install-deps: false
       - run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev libpulse-dev
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-      - run: cmake --build build --config Release --parallel
-      - name: Upload Linux executable
+      - name: Configure Linux Release
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build Linux Release
+        run: cmake --build build --config Release --parallel
+      - name: Upload Linux Release
         uses: actions/upload-artifact@v4
         with:
-          name: pavotts-linux-x64
+          name: pavotts-linux-x64-release
           path: build/PavoTTSNative
 
   windows-desktop:
     runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: gui
+            gui_subsystem: ON
+          - variant: console
+            gui_subsystem: OFF
     steps:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
@@ -45,20 +55,20 @@ jobs:
           modules: qtmultimedia qtwebsockets
           cache: true
       - uses: ilammy/msvc-dev-cmd@v1
-      - name: Configure Windows Release GUI
-        run: cmake -S . -B build-windows -DCMAKE_BUILD_TYPE=Release -DPAVOTTS_WINDOWS_GUI_SUBSYSTEM=ON
-      - name: Build Windows Release GUI
-        run: cmake --build build-windows --config Release --parallel
+      - name: Configure Windows Release (${{ matrix.variant }})
+        run: cmake -S . -B build-${{ matrix.variant }} -DCMAKE_BUILD_TYPE=Release -DPAVOTTS_WINDOWS_GUI_SUBSYSTEM=${{ matrix.gui_subsystem }}
+      - name: Build Windows Release (${{ matrix.variant }})
+        run: cmake --build build-${{ matrix.variant }} --config Release --parallel
       - name: Deploy Qt runtime
-        run: windeployqt --qmldir qml build-windows/Release/PavoTTSNative.exe
+        run: windeployqt --qmldir qml build-${{ matrix.variant }}/Release/PavoTTSNative.exe
       - name: Include default configuration
         shell: pwsh
-        run: Copy-Item config.default build-windows/Release/.config
+        run: Copy-Item config.default build-${{ matrix.variant }}/Release/.config
       - name: Upload Windows Release package
         uses: actions/upload-artifact@v4
         with:
-          name: pavotts-windows-x64
-          path: build-windows/Release/
+          name: pavotts-windows-x64-${{ matrix.variant }}-release
+          path: build-${{ matrix.variant }}/Release/
           include-hidden-files: true
 
   publish-windows-release:
@@ -68,10 +78,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Windows package
+      - name: Download Windows GUI Release package
         uses: actions/download-artifact@v4
         with:
-          name: pavotts-windows-x64
+          name: pavotts-windows-x64-gui-release
           path: release/PavoTTS
       - name: Create ZIP
         run: |
@@ -81,7 +91,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous
-          name: PavoTTS Windows x64 - última compilación
+          name: PavoTTS Windows x64 - última compilación Release
           prerelease: true
           make_latest: false
           overwrite_files: true
@@ -109,7 +119,7 @@ jobs:
           arch: android_arm64_v8a
           modules: qtmultimedia qtwebsockets
           cache: true
-      - name: Configure Android
+      - name: Configure Android Release
         shell: bash
         run: |
           QT_CMAKE="$(find "$QT_ROOT_DIR" -type f -name qt-cmake | head -n 1)"
@@ -129,7 +139,7 @@ jobs:
               }
           }
           EOF
-      - name: Build Android
+      - name: Build Android Release APK
         shell: bash
         run: |
           for attempt in 1 2 3; do
@@ -142,9 +152,9 @@ jobs:
             fi
           done
           exit 1
-      - name: Upload APK
+      - name: Upload Android Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: pavotts-android-arm64
+          name: pavotts-android-arm64-release
           path: build-android/**/*.apk
           if-no-files-found: error

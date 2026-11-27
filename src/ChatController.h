@@ -94,6 +94,8 @@ private:
     void parseYouTubeResponse(const QJsonObject &root);
     void stopYouTube();
     void setConnectedState();
+    void scheduleKickRetry(const QString &reason);
+    void scheduleTwitchRetry(const QString &reason);
     QString m_status = QStringLiteral("Ingresá los datos y presioná CONECTAR.");
     QVariantList m_messages;
     QString m_twitchChannel, m_twitchUsername, m_twitchToken;
@@ -104,10 +106,12 @@ private:
     QNetworkAccessManager m_network;
     QPointer<QWebSocket> m_twitchSocket, m_kickSocket;
     QPointer<QNetworkReply> m_youtubeReply, m_ttsReply;
-    QTimer m_youtubeTimer;
+    QTimer m_youtubeTimer, m_twitchRetryTimer, m_kickRetryTimer, m_twitchHandshakeTimer, m_kickHandshakeTimer, m_kickLeaseTimer;
     QString m_twitchBuffer, m_kickChatroomId, m_youtubeApiKey, m_youtubeClientVersion, m_youtubeContinuation;
     int m_youtubePollDelay = 5000;
     bool m_stopping = false, m_connected = false, m_speaking = false;
+    bool m_twitchRejected = false, m_twitchAuthenticated = false, m_kickSubscribed = false;
+    int m_twitchRetryDelay = 3000, m_kickRetryDelay = 3000;
     quint64 m_connectionGeneration = 0;
     QQueue<QString> m_speechQueue;
     static constexpr int MaxSpeechQueue = 256;

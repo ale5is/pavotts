@@ -727,10 +727,12 @@ void ChatController::connectKick()
     const QString kickSlug = normalizeKickChannel(m_kickChannel);
     if (kickSlug.isEmpty()) { scheduleKickRetry(QStringLiteral("Ingresá un nombre de canal Kick válido.")); return; }
     const QString encodedChannel = QString::fromLatin1(QUrl::toPercentEncoding(kickSlug));
+    // Centrifugo channel negotiation needs both IDs. Resolve the channel
+    // resource first; keep LiteKickChat's direct chatroom route as fallback.
     const QString lookupPath = m_kickLookupAttempt == 0
-        ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
+        ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
         : (m_kickLookupAttempt == 1
-            ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
+            ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
             : QStringLiteral("/api/v1/channels/%1").arg(encodedChannel));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com") + lookupPath)};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
@@ -761,9 +763,9 @@ void ChatController::connectKick()
             return;
         }
         const QJsonObject lookup = doc.object();
-        const bool directChatroomResponse = m_kickLookupAttempt == 0;
+        const bool directChatroomResponse = m_kickLookupAttempt == 1;
         const QString channelText = directChatroomResponse
-            ? QString()
+            ? lookup.value(QStringLiteral("chatable_id")).toVariant().toString()
             : lookup.value(QStringLiteral("id")).toVariant().toString();
         QString roomText = directChatroomResponse
             ? lookup.value(QStringLiteral("id")).toVariant().toString()

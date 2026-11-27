@@ -567,9 +567,10 @@ ChatController::ChatController(QObject *parent)
             m_twitchSocket->close();
         }
     });
-    m_kickHeartbeatTimer.setInterval(45000);
+    m_kickHeartbeatTimer.setInterval(150000);
     connect(&m_kickHeartbeatTimer, &QTimer::timeout, this, [this]() {
-        if (!m_stopping && m_kickSocket && m_kickLastActivity.isValid() && m_kickLastActivity.elapsed() >= 45000) {
+        if (!m_stopping && m_kickSocket && m_kickLastActivity.isValid()
+            && m_kickLastActivity.elapsed() >= m_kickHeartbeatTimer.interval()) {
             m_kickHeartbeatTimer.stop();
             setStatus(QStringLiteral("Kick"), QStringLiteral("Se perdió el heartbeat de Centrifugo; reconectando."));
             m_kickSocket->close();
@@ -1112,6 +1113,14 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         return;
     }
     if (frame.value(QStringLiteral("id")).toInt() == 1 && frame.contains(QStringLiteral("connect"))) {
+        const int pingSeconds = frame.value(QStringLiteral("connect")).toObject()
+                                    .value(QStringLiteral("ping")).toInt();
+        const int heartbeatTimeout = pingSeconds > 0
+            ? qBound(15000, pingSeconds * 1000 + 15000, 600000)
+            : 150000;
+        m_kickLastActivity.restart();
+        m_kickHeartbeatTimer.setInterval(heartbeatTimeout);
+        m_kickHeartbeatTimer.start();
         const QString subscription = QStringLiteral("{\"id\":2,\"subscribe\":{\"channel\":\"chatrooms.%1.v2\"}}").arg(m_kickChatroomId);
         socket->sendTextMessage(subscription);
         setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticado; suscribiendo al chat..."));

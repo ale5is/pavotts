@@ -24,16 +24,10 @@ QString cleanText(QString value)
     return value.trimmed();
 }
 
-QString cleanUserName(QString name, const QString &message)
+QString cleanUserName(QString name)
 {
     name = name.trimmed();
-    if (name.isEmpty()) return QStringLiteral("User");
-    if (!message.isEmpty() && name.endsWith(message, Qt::CaseSensitive))
-        name.chop(message.size());
-    name = name.trimmed();
-    if (name.startsWith('@')) name.remove(0, 1);
-    name.replace(QRegularExpression(QStringLiteral(" +")), QStringLiteral(" "));
-    return name.trimmed().isEmpty() ? QStringLiteral("User") : name.trimmed();
+    return name.isEmpty() ? QStringLiteral("User") : name;
 }
 
 QString correctPronunciation(QString text)
@@ -718,7 +712,7 @@ void ChatController::stopYouTube()
 void ChatController::publishMessage(const QString &rawName, const QString &rawText, const QString &platform)
 {
     const QString message = cleanText(rawText);
-    const QString name = cleanUserName(cleanText(rawName), message);
+    const QString name = cleanUserName(cleanText(rawName));
     if (message.isEmpty()) return;
     QVariantMap item{{QStringLiteral("name"), name},
                      {QStringLiteral("text"), message},

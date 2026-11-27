@@ -99,7 +99,8 @@ QJsonObject findLiveChatRenderer(const QJsonValue &value)
     return {};
 }
 
-QString findLiveChatContinuation(const QJsonValue &rendererValue, int *pollingDelay = nullptr)
+QString findLiveChatContinuation(const QJsonValue &rendererValue, int *pollingDelay = nullptr,
+                                    bool preferTimed = false)
 {
     if (pollingDelay)
         *pollingDelay = 0;
@@ -109,11 +110,14 @@ QString findLiveChatContinuation(const QJsonValue &rendererValue, int *pollingDe
     if (renderer.value(QStringLiteral("isReplay")).toBool())
         return {};
     const QJsonArray continuations = renderer.value(QStringLiteral("continuations")).toArray();
-    const QStringList preferredTypes = {
-        QStringLiteral("reloadContinuationData"),
-        QStringLiteral("timedContinuationData"),
-        QStringLiteral("invalidationContinuationData")
-    };
+    const QStringList preferredTypes = preferTimed
+        ? QStringList{QStringLiteral("timedContinuationData"),
+                      QStringLiteral("invalidationContinuationData"),
+                      QStringLiteral("liveChatReplayContinuationData"),
+                      QStringLiteral("reloadContinuationData")}
+        : QStringList{QStringLiteral("reloadContinuationData"),
+                      QStringLiteral("timedContinuationData"),
+                      QStringLiteral("invalidationContinuationData")};
     for (const QString &type : preferredTypes) {
         for (const QJsonValue &entry : continuations) {
             const QJsonObject data = entry.toObject().value(type).toObject();
@@ -121,7 +125,9 @@ QString findLiveChatContinuation(const QJsonValue &rendererValue, int *pollingDe
             if (token.isEmpty())
                 continue;
             if (pollingDelay) {
-                const int timeout = data.value(QStringLiteral("timeoutMs")).toInt();
+                int timeout = data.value(QStringLiteral("timeoutMs")).toInt();
+                if (timeout <= 0)
+                    timeout = data.value(QStringLiteral("timeUntilLastMessageMsec")).toInt();
                 if (timeout > 0)
                     *pollingDelay = qBound(1000, timeout, 60000);
             }
@@ -1304,7 +1310,7 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
     const QJsonObject liveChat = root.value(QStringLiteral("continuationContents")).toObject()
                                      .value(QStringLiteral("liveChatContinuation")).toObject();
     int serverDelay = 0;
-    const QString next = findLiveChatContinuation(liveChat, &serverDelay);
+    const QString next = findLiveChatContinuation(liveChat, &serverDelay, true);
     if (!next.isEmpty()) {
         m_youtubeContinuation = youtubeAllMessagesContinuation(next);
         m_youtubePollDelay = serverDelay > 0 ? serverDelay : 3000;

@@ -119,6 +119,7 @@ private:
     int m_youtubePollDelay = 5000;
     bool m_stopping = false, m_connected = false, m_speaking = false;
     bool m_twitchRejected = false, m_twitchAuthenticated = false, m_kickSubscribed = false;
+    bool m_youtubeConnected = false;
     int m_twitchRetryDelay = 3000, m_kickRetryDelay = 3000;
     quint64 m_connectionGeneration = 0;
     QQueue<QString> m_speechQueue;

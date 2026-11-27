@@ -81,7 +81,7 @@ jobs:
         run: |
           QT_CMAKE="$(find "$QT_ROOT_DIR" -type f -name qt-cmake | head -n 1)"
           test -n "$QT_CMAKE"
-          "$QT_CMAKE" -S . -B build-android -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" -DANDROID_NDK_ROOT="$ANDROID_NDK_ROOT"
+          "$QT_CMAKE" -S . -B build-android -DCMAKE_BUILD_TYPE=Release -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_SDK_ROOT="$ANDROID_SDK_ROOT" -DANDROID_NDK_ROOT="$ANDROID_NDK_ROOT" -DQT_ANDROID_DEPLOYMENT_TYPE=Debug
       - name: Build Android
         run: cmake --build build-android --target apk --config Release --parallel
       - name: Upload APK

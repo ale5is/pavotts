@@ -10,12 +10,12 @@ Esta rama es una reescritura independiente del proyecto Unity. La aplicación us
 - Kick: resolución primaria con `/api/v2/channels/<canal>` para obtener `id`, `chatroom.id` y `chatroom.chatable_id`; mantiene los endpoints de LiteKickChat como fallback. Negocia primero por `/api/v1/realtime/channels/<channel_id>/chat/connection` y cambia a `/api/v1/realtime/connection` si la ruta específica no ofrece Centrifugo. Usa el mismo `client_id` para negociar y obtener el guest token, envía `Origin: https://kick.com` en el WebSocket y se suscribe a `chatrooms.<id>.v2`. Responde al heartbeat, detecta errores de comando, desconexiones y unsubscribe, renueva la sesión antes del vencimiento y reintenta con backoff. LiteKickChat se usa como referencia de resolución y payload; su transporte Pusher anterior a la migración de Kick no se copia.
 - YouTube Live: obtiene la configuración InnerTube desde la página del canal, resuelve `@handle` mediante `navigation/resolve_url` y descubre transmisiones solo en la pestaña Browse del canal seleccionado. No usa el `videoId` de una redirección de `/live` ni videos recomendados. Antes de aceptar el chat, verifica que `videoOwnerRenderer.navigationEndpoint.browseEndpoint.browseId` coincida con el canal configurado; descarta candidatos de otro canal o sin chat activo y prueba el siguiente directo. Usa la continuación nativa de `/next`, la transforma a Live chat y sigue las continuaciones devueltas por `get_live_chat`.
 - Cola FIFO de TTS limitada a 256 elementos, filtro por prefijo, blacklist y reproducción MP3 con Qt Multimedia.
-- Configuración JSON en el directorio privado de configuración de la aplicación.
+- Configuración JSON en un archivo oculto `.config`: junto al ejecutable en Windows/Linux y en el directorio privado de configuración de la aplicación en Android.
 - Interfaz QML responsive: escritorio de dos columnas y móvil de una columna.
 
 ## Compilar escritorio
 
-Dependencias: Qt 6.8 o superior con Core, Gui, Qml, Quick, Quick Controls 2, Network, WebSockets y Multimedia; CMake 3.21+ y compilador C++17.
+Dependencias: Qt 6.8 o superior con Core, Gui, Qml, Quick, Quick Controls 2, Network, WebSockets y Multimedia; CMake 3.21+ y compilador C++17. No requiere instalar `ffmpeg.exe` por separado; la reproducción MP3 se realiza mediante Qt Multimedia y el backend multimedia disponible en cada sistema.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -30,7 +30,7 @@ No se debe considerar una plataforma compilada hasta que su job termine correcta
 
 ## Seguridad
 
-Los tokens y Session ID son credenciales sensibles. La configuración se guarda en el directorio privado de la aplicación, pero esta primera versión todavía no integra el almacén seguro del sistema operativo. No compartas el archivo `datos.config` ni lo subas al repositorio.
+Los tokens y Session ID son credenciales sensibles. En escritorio, `.config` se guarda junto al ejecutable; en Android, dentro del directorio privado de configuración de la aplicación. Esta primera versión todavía no integra el almacén seguro del sistema operativo. No compartas el archivo `datos.config` ni lo subas al repositorio.
 
 ## Pendiente de validación funcional
 

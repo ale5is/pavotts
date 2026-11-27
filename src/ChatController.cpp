@@ -602,7 +602,7 @@ void ChatController::connectKick()
             return;
         }
         const QJsonObject lookup = doc.object();
-        const QString channelText = lookup.value(QStringLiteral("id")).toVariant().toString();
+        const QString channelText = m_kickLookupAttempt < 2 ? lookup.value(QStringLiteral("id")).toVariant().toString() : QString();
         QString roomText = lookup.value(QStringLiteral("chatroom")).toObject()
                                .value(QStringLiteral("id")).toVariant().toString();
         if (roomText.isEmpty() && m_kickLookupAttempt == 2)

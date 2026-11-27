@@ -974,11 +974,12 @@ void ChatController::connectKick()
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
             {QStringLiteral("client"), QJsonObject{{QStringLiteral("id"), clientId}, {QStringLiteral("type"), QStringLiteral("web")}}},
-            {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}}}}}
+            {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}}}}}
         };
-        const QString realtimePath = m_kickChannelId.isEmpty()
-            ? QStringLiteral("/api/v1/realtime/connection")
-            : QStringLiteral("/api/v1/realtime/channels/%1/chat/connection").arg(m_kickChannelId);
+        const bool usingChannelNegotiation = !m_kickChannelId.isEmpty() && !m_kickUseGenericRealtime;
+        const QString realtimePath = usingChannelNegotiation
+            ? QStringLiteral("/api/v1/realtime/channels/%1/chat/connection").arg(m_kickChannelId)
+            : QStringLiteral("/api/v1/realtime/connection");
         QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com") + realtimePath)};
         post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         post.setRawHeader("Origin", "https://kick.com");
@@ -986,7 +987,7 @@ void ChatController::connectKick()
         post.setRawHeader("Accept", "application/json");
         post.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0"));
         auto *connection = m_network.post(post, QJsonDocument(body).toJson(QJsonDocument::Compact));
-        connect(connection, &QNetworkReply::finished, this, [this, connection, clientId, generation]() {
+        connect(connection, &QNetworkReply::finished, this, [this, connection, clientId, generation, usingChannelNegotiation]() {
             if (m_stopping || generation != m_connectionGeneration) { connection->deleteLater(); return; }
             const QByteArray bytes = connection->readAll();
             const int code = connection->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -994,20 +995,38 @@ void ChatController::connectKick()
             connection->deleteLater();
             const QJsonDocument data = QJsonDocument::fromJson(bytes);
             if (!data.isObject() || code < 200 || code >= 300) {
-                scheduleKickRetry(QStringLiteral("Falló la negociación realtime (HTTP %1). Respuesta: %2")
+                if (usingChannelNegotiation) {
+                    m_kickUseGenericRealtime = true;
+                    setStatus(QStringLiteral("Kick"), QStringLiteral("La negociación por canal falló (HTTP %1); probando negociación global de Kick.").arg(code));
+                    connectKick();
+                    return;
+                }
+                scheduleKickRetry(QStringLiteral("Falló la negociación realtime global (HTTP %1). Respuesta: %2")
                                       .arg(code).arg(responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
                 return;
             }
             QString wsUrl;
+            QStringList offeredProviders;
             const QJsonArray list = data.object().value(QStringLiteral("data")).toObject().value(QStringLiteral("connections")).toArray();
             for (const QJsonValue &value : list) {
                 const QJsonObject candidate = value.toObject();
-                if (candidate.value(QStringLiteral("provider")).toString() == QStringLiteral("centrifugo"))
+                const QString provider = candidate.value(QStringLiteral("provider")).toString();
+                if (!provider.isEmpty())
+                    offeredProviders.append(provider);
+                if (provider == QStringLiteral("centrifugo"))
                     wsUrl = candidate.value(QStringLiteral("credentials")).toObject().value(QStringLiteral("url")).toString();
             }
             const QUrl realtimeUrl(wsUrl);
             if (realtimeUrl.scheme() != QStringLiteral("wss") || realtimeUrl.host().isEmpty()) {
-                scheduleKickRetry(QStringLiteral("Kick devolvió un endpoint Centrifugo inválido: %1").arg(wsUrl.left(180)));
+                if (usingChannelNegotiation) {
+                    m_kickUseGenericRealtime = true;
+                    setStatus(QStringLiteral("Kick"), QStringLiteral("La negociación por canal no ofreció Centrifugo (%1); probando negociación global.").arg(offeredProviders.join(QStringLiteral(", "))));
+                    connectKick();
+                    return;
+                }
+                scheduleKickRetry(QStringLiteral("Kick no ofreció un endpoint Centrifugo válido. Proveedores: %1. Respuesta: %2")
+                                      .arg(offeredProviders.isEmpty() ? QStringLiteral("ninguno") : offeredProviders.join(QStringLiteral(", ")),
+                                           responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
                 return;
             }
             QNetworkRequest auth{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/auth/connection"))};
@@ -1143,6 +1162,7 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         m_kickSubscribed = true;
         m_kickHandshakeTimer.stop();
         m_kickRetryDelay = 3000;
+        m_kickUseGenericRealtime = false;
         m_kickLeaseTimer.start(m_kickLeaseTimeoutMs);
         setStatus(QStringLiteral("Kick"), QStringLiteral("Chat conectado."));
         setConnectedState();

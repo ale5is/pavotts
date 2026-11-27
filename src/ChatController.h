@@ -110,7 +110,7 @@ private:
     QPointer<QWebSocket> m_twitchSocket, m_kickSocket;
     QPointer<QNetworkReply> m_youtubeReply, m_ttsReply;
     QTimer m_youtubeTimer, m_twitchRetryTimer, m_kickRetryTimer, m_twitchHandshakeTimer, m_kickHandshakeTimer, m_kickLeaseTimer;
-    QString m_twitchBuffer, m_kickChatroomId, m_youtubeApiKey, m_youtubeClientVersion, m_youtubeContinuation;
+    QString m_twitchBuffer, m_kickChannelId, m_kickChatroomId, m_youtubeApiKey, m_youtubeClientVersion, m_youtubeContinuation;
     QJsonObject m_youtubeContext;
     int m_kickLookupAttempt = 0;
     QSet<QString> m_youtubeSeenIds;

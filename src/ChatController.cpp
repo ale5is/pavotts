@@ -567,6 +567,14 @@ ChatController::ChatController(QObject *parent)
             m_twitchSocket->close();
         }
     });
+    m_kickHeartbeatTimer.setInterval(45000);
+    connect(&m_kickHeartbeatTimer, &QTimer::timeout, this, [this]() {
+        if (!m_stopping && m_kickSocket && m_kickLastActivity.isValid() && m_kickLastActivity.elapsed() >= 45000) {
+            m_kickHeartbeatTimer.stop();
+            setStatus(QStringLiteral("Kick"), QStringLiteral("Se perdió el heartbeat de Centrifugo; reconectando."));
+            m_kickSocket->close();
+        }
+    });
     m_kickHandshakeTimer.setSingleShot(true);
     connect(&m_kickHandshakeTimer, &QTimer::timeout, this, [this]() {
         if (!m_stopping && m_kickSocket && !m_kickSubscribed) {
@@ -733,7 +741,7 @@ void ChatController::disconnectAll()
     m_stopping = true;
     m_youtubeTimer.stop();
     m_twitchRetryTimer.stop(); m_kickRetryTimer.stop();
-    m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
+    m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop(); m_kickHeartbeatTimer.stop();
     m_twitchAuthenticated = false; m_kickSubscribed = false; m_youtubeConnected = false;
     m_twitchBuffer.clear();
     setStatus(QStringLiteral("Twitch"), QStringLiteral("Desconectado."));
@@ -892,6 +900,7 @@ void ChatController::connectKick()
     m_kickRetryTimer.stop();
     m_kickHandshakeTimer.stop();
     m_kickLeaseTimer.stop();
+    m_kickHeartbeatTimer.stop();
     m_kickSubscribed = false;
     const quint64 generation = m_connectionGeneration;
     setStatus(QStringLiteral("Kick"), QStringLiteral("Resolviendo el canal..."));
@@ -1018,6 +1027,8 @@ void ChatController::connectKick()
                 socket->setProperty("kickToken", token);
                 connect(socket, &QWebSocket::connected, this, [this, socket, generation]() {
                     if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
+                    m_kickLastActivity.start();
+                    m_kickHeartbeatTimer.start();
                     socket->sendTextMessage(QStringLiteral("{\"id\":1,\"connect\":{\"token\":\"%1\",\"name\":\"js\"}}")
                                                 .arg(jsonEscaped(socket->property("kickToken").toString())));
                     setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticando realtime..."));
@@ -1025,6 +1036,7 @@ void ChatController::connectKick()
                 });
                 connect(socket, &QWebSocket::textMessageReceived, this, [this, socket, generation](const QString &text) {
                     if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
+                    m_kickLastActivity.restart();
                     const QList<QByteArray> lines = text.toUtf8().split('\n');
                     for (const QByteArray &line : lines) {
                         if (line.trimmed().isEmpty())
@@ -1046,6 +1058,7 @@ void ChatController::connectKick()
                         m_kickSubscribed = false;
                         m_kickHandshakeTimer.stop();
                         m_kickLeaseTimer.stop();
+                        m_kickHeartbeatTimer.stop();
                         setConnectedState();
                         scheduleKickRetry(QStringLiteral("Conexión cerrada."));
                     }
@@ -1065,6 +1078,7 @@ void ChatController::connectKick()
                     m_kickSubscribed = false;
                     m_kickHandshakeTimer.stop();
                     m_kickLeaseTimer.stop();
+                    m_kickHeartbeatTimer.stop();
                     setConnectedState();
                     socket->abort();
                     socket->deleteLater();

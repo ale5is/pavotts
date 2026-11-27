@@ -261,6 +261,9 @@ ChatController::~ChatController()
 }
 
 QString ChatController::status() const { return m_status; }
+QString ChatController::twitchStatus() const { return m_twitchStatus; }
+QString ChatController::kickStatus() const { return m_kickStatus; }
+QString ChatController::youtubeStatus() const { return m_youtubeStatus; }
 QVariantList ChatController::messages() const { return m_messages; }
 QString ChatController::twitchChannel() const { return m_twitchChannel; }
 QString ChatController::youtubeChannel() const { return m_youtubeChannel; }
@@ -343,6 +346,19 @@ void ChatController::setStatus(const QString &platform, const QString &message)
 {
     m_status = platform + QStringLiteral(": ") + message;
     emit statusChanged();
+    bool platformChanged = false;
+    if (platform == QStringLiteral("Twitch") && m_twitchStatus != message) {
+        m_twitchStatus = message;
+        platformChanged = true;
+    } else if (platform == QStringLiteral("Kick") && m_kickStatus != message) {
+        m_kickStatus = message;
+        platformChanged = true;
+    } else if (platform == QStringLiteral("YouTube") && m_youtubeStatus != message) {
+        m_youtubeStatus = message;
+        platformChanged = true;
+    }
+    if (platformChanged)
+        emit platformStatusesChanged();
 }
 
 void ChatController::setConnectedState()

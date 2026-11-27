@@ -125,7 +125,8 @@ private:
     bool m_stopping = false, m_connected = false, m_speaking = false;
     bool m_twitchRejected = false, m_twitchAuthenticated = false, m_kickSubscribed = false;
     bool m_kickUseGenericRealtime = false;
-    bool m_youtubeConnected = false;
+    bool m_kickConnectAcknowledged = false;
+    bool m_youtubeConnected = false, m_youtubeBaselineReady = false;
     int m_twitchRetryDelay = 3000, m_kickRetryDelay = 3000;
     int m_kickLeaseTimeoutMs = 35 * 60 * 1000;
     quint64 m_connectionGeneration = 0;

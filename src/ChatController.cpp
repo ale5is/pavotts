@@ -481,14 +481,6 @@ QString correctPronunciation(QString text)
     return text.trimmed();
 }
 
-QString jsonEscaped(const QString &value)
-{
-    QJsonArray array;
-    array.append(value);
-    const QByteArray json = QJsonDocument(array).toJson(QJsonDocument::Compact);
-    return QString::fromUtf8(json.mid(1, json.size() - 2));
-}
-
 QString findYouTubeVideoOwnerChannelId(const QJsonValue &value)
 {
     if (value.isObject()) {

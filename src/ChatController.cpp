@@ -405,25 +405,25 @@ void ChatController::connectKick()
                 auto *socket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
                 m_kickSocket = socket;
                 socket->setProperty("kickToken", token);
-                connect(socket, &QWebSocket::connected, this, [this, socket]() {
+                connect(socket, &QWebSocket::connected, this, [this, socket, generation]() {
                     if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
                     socket->sendTextMessage(QStringLiteral("{\"id\":1,\"connect\":{\"token\":\"%1\",\"name\":\"pavotts-native\"}}")
                                                 .arg(jsonEscaped(socket->property("kickToken").toString())));
                     setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticando realtime..."));
                 });
-                connect(socket, &QWebSocket::textMessageReceived, this, [this, socket](const QString &text) {
-                    if (m_kickSocket != socket || m_stopping) return;
+                connect(socket, &QWebSocket::textMessageReceived, this, [this, socket, generation](const QString &text) {
+                    if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
                     const QJsonDocument frame = QJsonDocument::fromJson(text.toUtf8());
                     if (frame.isObject()) handleKickFrame(frame.object(), socket);
                 });
-                connect(socket, &QWebSocket::disconnected, this, [this, socket]() {
+                connect(socket, &QWebSocket::disconnected, this, [this, socket, generation]() {
                     if (m_kickSocket == socket && generation == m_connectionGeneration) {
                         m_kickSocket = nullptr;
                         setStatus(QStringLiteral("Kick"), QStringLiteral("Conexión cerrada."));
                         setConnectedState();
                     }
                 });
-                connect(socket, &QWebSocket::errorOccurred, this, [this, socket](QAbstractSocket::SocketError) {
+                connect(socket, &QWebSocket::errorOccurred, this, [this, socket, generation](QAbstractSocket::SocketError) {
                     if (m_kickSocket == socket && !m_stopping && generation == m_connectionGeneration)
                         setStatus(QStringLiteral("Kick"), socket->errorString());
                 });

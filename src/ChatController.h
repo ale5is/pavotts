@@ -91,6 +91,7 @@ private:
     void connectYouTube();
     void handleTwitchLine(const QString &line, QWebSocket *socket);
     void handleKickFrame(const QJsonObject &frame, QWebSocket *socket);
+    void requestYouTubeChannelStreams(const QString &channelId);
     void requestYouTubeInitialContinuation(const QString &videoId);
     void pollYouTube();
     void parseYouTubeResponse(const QJsonObject &root);

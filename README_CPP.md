@@ -6,7 +6,7 @@ Esta rama es una reescritura independiente del proyecto Unity. La aplicación us
 
 - Configuración de Twitch, YouTube Live, Kick, TikTok TTS, voz, prefijo de lectura, volumen y blacklist.
 - Chat unificado con historial de 24 mensajes.
-- Twitch IRC por WebSocket: autenticación, CAP, JOIN, PING/PONG y PRIVMSG.
+- Twitch IRC por WebSocket con NICK anónimo justinfan, CAP, JOIN, PING/PONG y PRIVMSG; solo lectura y sin OAuth. El acceso anónimo no está garantizado oficialmente y puede estar limitado por Twitch o por el canal.
 - Kick: resolución del canal, negociación REST, token invitado, conexión Centrifugo, suscripción y publicaciones.
 - YouTube Live: lectura del HTML del canal, extracción de InnerTube y polling de continuaciones.
 - Cola FIFO de TTS limitada a 256 elementos, filtro por prefijo, blacklist y reproducción MP3 con Qt Multimedia.

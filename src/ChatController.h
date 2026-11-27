@@ -127,7 +127,6 @@ private:
     bool m_kickUseGenericRealtime = false;
     bool m_kickConnectAcknowledged = false;
     bool m_youtubeConnected = false, m_youtubeBaselineReady = false;
-    qint64 m_youtubeConnectedAtUsec = 0;
     int m_twitchRetryDelay = 3000, m_kickRetryDelay = 3000;
     int m_kickLeaseTimeoutMs = 35 * 60 * 1000;
     quint64 m_connectionGeneration = 0;

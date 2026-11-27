@@ -40,7 +40,23 @@ QString correctPronunciation(QString text)
 {
     text.replace('@', QStringLiteral(" arroba "));
     text.replace('#', QStringLiteral(" almohadilla "));
-    text.replace('
+    text.replace('$', QStringLiteral(" dólar "));
+    text.replace('%', QStringLiteral(" por ciento "));
+    text.replace('_', ' ');
+    const QList<QPair<QString, QString>> words = {
+        {QStringLiteral("\\bRoblox\\b"), QStringLiteral("Ró-bloks")},
+        {QStringLiteral("\\bMinecraft\\b"), QStringLiteral("Máin-cráft")},
+        {QStringLiteral("\\bDiscord\\b"), QStringLiteral("Dis-córd")},
+        {QStringLiteral("\\bYouTube\\b"), QStringLiteral("Yutub")}
+    };
+    for (const auto &word : words)
+        text.replace(QRegularExpression(word.first, QRegularExpression::CaseInsensitiveOption), word.second);
+    text.replace(QRegularExpression(QStringLiteral(" +")), QStringLiteral(" "));
+    return text.trimmed();
+}
+
+QString jsonEscaped(const QString &value)
+{
     QJsonArray array;
     array.append(value);
     const QByteArray json = QJsonDocument(array).toJson(QJsonDocument::Compact);
@@ -878,158 +894,3 @@ QString ChatController::oauthHelp() const
 {
     return QStringLiteral("Creá un token OAuth de Twitch con el permiso chat:read. El usuario debe coincidir con la cuenta del token.");
 }
-, QStringLiteral(" dólar "));
-    text.replace('%', QStringLiteral(" por ciento "));
-    text.replace('_', ' ');
-    const QList<QPair<QString, QString>> words = {
-        {QStringLiteral("\\bRoblox\\b"), QStringLiteral("Ró-bloks")},
-        {QStringLiteral("\\bMinecraft\\b"), QStringLiteral("Máin-cráft")},
-        {QStringLiteral("\\bDiscord\\b"), QStringLiteral("Dis-córd")},
-        {QStringLiteral("\\bYouTube\\b"), QStringLiteral("Yutub")}
-    };
-    for (const auto &word : words)
-        text.replace(QRegularExpression(word.first, QRegularExpression::CaseInsensitiveOption), word.second);
-    text.replace(QRegularExpression(QStringLiteral(" +")), QStringLiteral(" "));
-    return text.trimmed();
-}
-
-QString jsonEscaped(const QString &value)
-{
-    QJsonArray array;
-    array.append(value);
-    const QByteArray json = QJsonDocument(array).toJson(QJsonDocument::Compact);
-    return QString::fromUtf8(json.mid(1, json.size() - 2));
-}
-
-void collectYouTubeMessages(const QJsonValue &value, QList<QPair<QString, QString>> &messages)
-{
-    if (value.isArray()) {
-        for (const QJsonValue &child : value.toArray())
-            collectYouTubeMessages(child, messages);
-        return;
-    }
-    if (!value.isObject())
-        return;
-
-    const QJsonObject object = value.toObject();
-    const QStringList rendererTypes = {
-        QStringLiteral("liveChatTextMessageRenderer"),
-        QStringLiteral("liveChatPaidMessageRenderer"),
-        QStringLiteral("liveChatMembershipItemRenderer"),
-        QStringLiteral("liveChatPaidStickerRenderer")
-    };
-    for (const QString &type : rendererTypes) {
-        if (!object.contains(type))
-            continue;
-        const QJsonObject renderer = object.value(type).toObject();
-        const QString name = renderer.value(QStringLiteral("authorName")).toObject()
-                                 .value(QStringLiteral("simpleText")).toString(QStringLiteral("YouTube"));
-        QString message;
-        const QJsonArray runs = renderer.value(QStringLiteral("message")).toObject()
-                                    .value(QStringLiteral("runs")).toArray();
-        for (const QJsonValue &run : runs) {
-            const QJsonObject runObject = run.toObject();
-            message += runObject.value(QStringLiteral("text")).toString();
-            if (runObject.contains(QStringLiteral("emoji")) && message.isEmpty()) {
-                const QJsonArray shortcuts = runObject.value(QStringLiteral("emoji")).toObject()
-                                                .value(QStringLiteral("shortcuts")).toArray();
-                if (!shortcuts.isEmpty())
-                    message += shortcuts.first().toString();
-            }
-        }
-        if (message.isEmpty())
-            message = renderer.value(QStringLiteral("headerSubtext")).toObject()
-                          .value(QStringLiteral("simpleText")).toString();
-        if (!message.isEmpty())
-            messages.append(qMakePair(name, message));
-    }
-    for (auto it = object.begin(); it != object.end(); ++it)
-        collectYouTubeMessages(it.value(), messages);
-}
-}
-
-ChatController::ChatController(QObject *parent)
-    : QObject(parent), m_player(this), m_audioOutput(this)
-{
-    m_player.setAudioOutput(&m_audioOutput);
-    m_audioOutput.setVolume(m_volume);
-    connect(&m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus state) {
-        if (state == QMediaPlayer::EndOfMedia || state == QMediaPlayer::InvalidMedia)
-            finishSpeech();
-    });
-    connect(&m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString &error) {
-        setStatus(QStringLiteral("TTS"), QStringLiteral("Error de reproducción: ") + error);
-        finishSpeech();
-    });
-    m_youtubeTimer.setSingleShot(true);
-    connect(&m_youtubeTimer, &QTimer::timeout, this, &ChatController::pollYouTube);
-    m_twitchRetryTimer.setSingleShot(true);
-    connect(&m_twitchRetryTimer, &QTimer::timeout, this, [this]() {
-        if (!m_stopping && !m_twitchRejected && !m_twitchSocket && !m_twitchChannel.isEmpty()) connectTwitch();
-    });
-    m_kickRetryTimer.setSingleShot(true);
-    connect(&m_kickRetryTimer, &QTimer::timeout, this, [this]() {
-        if (!m_stopping && !m_kickSocket && !m_kickChannel.isEmpty()) connectKick();
-    });
-    m_twitchHandshakeTimer.setSingleShot(true);
-    connect(&m_twitchHandshakeTimer, &QTimer::timeout, this, [this]() {
-        if (!m_stopping && m_twitchSocket && !m_twitchAuthenticated) {
-            setStatus(QStringLiteral("Twitch"), QStringLiteral("No se confirmó el inicio de sesión en 15 segundos; reconectando."));
-            m_twitchSocket->close();
-        }
-    });
-    m_kickHandshakeTimer.setSingleShot(true);
-    connect(&m_kickHandshakeTimer, &QTimer::timeout, this, [this]() {
-        if (!m_stopping && m_kickSocket && !m_kickSubscribed) {
-            setStatus(QStringLiteral("Kick"), QStringLiteral("No se confirmó la suscripción en 20 segundos; reconectando."));
-            m_kickSocket->close();
-        }
-    });
-    m_kickLeaseTimer.setSingleShot(true);
-    connect(&m_kickLeaseTimer, &QTimer::timeout, this, [this]() {
-        if (!m_stopping && m_kickSocket) {
-            setStatus(QStringLiteral("Kick"), QStringLiteral("Renovando el token temporal."));
-            m_kickSocket->close();
-        }
-    });
-    loadSettings();
-}
-
-ChatController::~ChatController()
-{
-    disconnectAll();
-}
-
-QString ChatController::status() const { return m_status; }
-QVariantList ChatController::messages() const { return m_messages; }
-QString ChatController::twitchChannel() const { return m_twitchChannel; }
-QString ChatController::twitchUsername() const { return m_twitchUsername; }
-QString ChatController::twitchToken() const { return m_twitchToken; }
-QString ChatController::youtubeChannel() const { return m_youtubeChannel; }
-QString ChatController::kickChannel() const { return m_kickChannel; }
-QString ChatController::sessionId() const { return m_sessionId; }
-QString ChatController::voice() const { return m_voice; }
-QString ChatController::character() const { return m_character; }
-QString ChatController::commandPrefix() const { return m_commandPrefix; }
-double ChatController::volume() const { return m_volume; }
-bool ChatController::connected() const { return m_connected; }
-bool ChatController::speaking() const { return m_speaking; }
-int ChatController::queuedSpeech() const { return m_speechQueue.size(); }
-
-QString ChatController::blacklistText() const
-{
-    QStringList names = m_blacklist.values();
-    names.sort(Qt::CaseInsensitive);
-    return names.join(QStringLiteral("\n"));
-}
-
-void ChatController::setTwitchChannel(const QString &v) { if (m_twitchChannel != v) { m_twitchChannel = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setTwitchUsername(const QString &v) { if (m_twitchUsername != v) { m_twitchUsername = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setTwitchToken(const QString &v) { if (m_twitchToken != v) { m_twitchToken = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setYoutubeChannel(const QString &v) { if (m_youtubeChannel != v) { m_youtubeChannel = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setKickChannel(const QString &v) { if (m_kickChannel != v) { m_kickChannel = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setSessionId(const QString &v) { if (m_sessionId != v) { m_sessionId = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setVoice(const QString &v) { if (m_voice != v) { m_voice = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setCharacter(const QString &v) { if (m_character != v) { m_character = v; emit settingsChanged(); } }
-void ChatController::setCommandPrefix(const QString &v) { if (m_commandPrefix != v) { m_commandPrefix = v; emit settingsChanged(); } }
-void ChatController::setVolume(double v) { m_volume = qBound(0.0, v, 1.0); m_audioOutput.setVolume(m_volume); emit settingsChanged(); }

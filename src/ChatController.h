@@ -125,6 +125,7 @@ private:
     bool m_twitchRejected = false, m_twitchAuthenticated = false, m_kickSubscribed = false;
     bool m_youtubeConnected = false;
     int m_twitchRetryDelay = 3000, m_kickRetryDelay = 3000;
+    int m_kickLeaseTimeoutMs = 35 * 60 * 1000;
     quint64 m_connectionGeneration = 0;
     QQueue<QString> m_speechQueue;
     static constexpr int MaxSpeechQueue = 256;

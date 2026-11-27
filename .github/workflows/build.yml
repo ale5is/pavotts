@@ -89,4 +89,4 @@ jobs:
         with:
           name: pavotts-android-arm64
           path: build-android/**/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error

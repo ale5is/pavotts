@@ -108,6 +108,8 @@ private:
     QPointer<QNetworkReply> m_youtubeReply, m_ttsReply;
     QTimer m_youtubeTimer, m_twitchRetryTimer, m_kickRetryTimer, m_twitchHandshakeTimer, m_kickHandshakeTimer, m_kickLeaseTimer;
     QString m_twitchBuffer, m_kickChatroomId, m_youtubeApiKey, m_youtubeClientVersion, m_youtubeContinuation;
+    QSet<QString> m_youtubeSeenIds;
+    QQueue<QString> m_youtubeSeenOrder;
     int m_youtubePollDelay = 5000;
     bool m_stopping = false, m_connected = false, m_speaking = false;
     bool m_twitchRejected = false, m_twitchAuthenticated = false, m_kickSubscribed = false;

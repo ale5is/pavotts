@@ -15,7 +15,7 @@ Esta rama es una reescritura independiente del proyecto Unity. La aplicación us
 
 ## Compilar escritorio
 
-Dependencias: Qt 6.5 o superior con Core, Gui, Qml, Quick, Quick Controls 2, Network, WebSockets y Multimedia; CMake 3.21+ y compilador C++17.
+Dependencias: Qt 6.8 o superior con Core, Gui, Qml, Quick, Quick Controls 2, Network, WebSockets y Multimedia; CMake 3.21+ y compilador C++17.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release

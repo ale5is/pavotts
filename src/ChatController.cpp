@@ -743,7 +743,7 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         return;
     }
     if (frame.value(QStringLiteral("id")).toInt() == 1 && frame.contains(QStringLiteral("connect"))) {
-        const QString subscription = QStringLiteral("{\"id\":2,\"subscribe\":{\"channel\":\"chatrooms.%1.v2\"}}").arg(m_kickChatroomId);
+        const QString subscription = QStringLiteral("{\"id\":2,\"subscribe\":{\"channel\":\"chatrooms.%1.v2\",\"flag\":1}}").arg(m_kickChatroomId);
         socket->sendTextMessage(subscription);
         setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticado; suscribiendo al chat..."));
         setConnectedState();

@@ -226,6 +226,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 Field { id: blacklistEntry; placeholderText: "Nombre de usuario" }
                                 Button { text: "Agregar"; onClicked: { chat.addBlacklist(blacklistEntry.text); blacklistEntry.text = "" } }
+                                Button { text: "Quitar"; onClicked: { chat.removeBlacklist(blacklistEntry.text); blacklistEntry.text = "" } }
                                 Button { text: "Vaciar"; onClicked: chat.clearBlacklist() }
                             }
                             TextArea {

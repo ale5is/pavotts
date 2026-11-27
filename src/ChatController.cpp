@@ -1113,11 +1113,16 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         return;
     }
     if (frame.value(QStringLiteral("id")).toInt() == 1 && frame.contains(QStringLiteral("connect"))) {
-        const int pingSeconds = frame.value(QStringLiteral("connect")).toObject()
-                                    .value(QStringLiteral("ping")).toInt();
+        const QJsonObject connectInfo = frame.value(QStringLiteral("connect")).toObject();
+        const int pingSeconds = connectInfo.value(QStringLiteral("ping")).toInt();
         const int heartbeatTimeout = pingSeconds > 0
             ? qBound(15000, pingSeconds * 1000 + 15000, 600000)
             : 150000;
+        const int ttlSeconds = connectInfo.value(QStringLiteral("ttl")).toInt();
+        if (connectInfo.value(QStringLiteral("expires")).toBool() && ttlSeconds > 0)
+            m_kickLeaseTimeoutMs = qBound(60000, ttlSeconds * 750, 45 * 60 * 1000);
+        else
+            m_kickLeaseTimeoutMs = 35 * 60 * 1000;
         m_kickLastActivity.restart();
         m_kickHeartbeatTimer.setInterval(heartbeatTimeout);
         m_kickHeartbeatTimer.start();
@@ -1130,7 +1135,7 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         m_kickSubscribed = true;
         m_kickHandshakeTimer.stop();
         m_kickRetryDelay = 3000;
-        m_kickLeaseTimer.start(35 * 60 * 1000);
+        m_kickLeaseTimer.start(m_kickLeaseTimeoutMs);
         setStatus(QStringLiteral("Kick"), QStringLiteral("Chat conectado."));
         setConnectedState();
         return;

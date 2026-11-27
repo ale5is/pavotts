@@ -282,25 +282,25 @@ void ChatController::disconnectAll()
     m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
     m_twitchAuthenticated = false; m_kickSubscribed = false;
     if (m_youtubeReply) {
-        auto *reply = m_youtubeReply;
+        auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
         reply->abort();
         reply->deleteLater();
     }
     if (m_ttsReply) {
-        auto *reply = m_ttsReply;
+        auto *reply = m_ttsReply.data();
         m_ttsReply = nullptr;
         reply->abort();
         reply->deleteLater();
     }
     if (m_twitchSocket) {
-        auto *socket = m_twitchSocket;
+        auto *socket = m_twitchSocket.data();
         m_twitchSocket = nullptr;
         socket->close();
         socket->deleteLater();
     }
     if (m_kickSocket) {
-        auto *socket = m_kickSocket;
+        auto *socket = m_kickSocket.data();
         m_kickSocket = nullptr;
         socket->close();
         socket->deleteLater();
@@ -679,7 +679,7 @@ void ChatController::stopYouTube()
 {
     m_youtubeTimer.stop();
     if (m_youtubeReply) {
-        auto *reply = m_youtubeReply;
+        auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
         reply->abort();
         reply->deleteLater();
@@ -847,7 +847,7 @@ void ChatController::clearSpeechQueue()
     m_speechQueue.clear();
     ++m_speechGeneration;
     if (m_ttsReply) {
-        auto *reply = m_ttsReply;
+        auto *reply = m_ttsReply.data();
         m_ttsReply = nullptr;
         reply->abort();
         reply->deleteLater();
@@ -1123,25 +1123,25 @@ void ChatController::disconnectAll()
     m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
     m_twitchAuthenticated = false; m_kickSubscribed = false;
     if (m_youtubeReply) {
-        auto *reply = m_youtubeReply;
+        auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
         reply->abort();
         reply->deleteLater();
     }
     if (m_ttsReply) {
-        auto *reply = m_ttsReply;
+        auto *reply = m_ttsReply.data();
         m_ttsReply = nullptr;
         reply->abort();
         reply->deleteLater();
     }
     if (m_twitchSocket) {
-        auto *socket = m_twitchSocket;
+        auto *socket = m_twitchSocket.data();
         m_twitchSocket = nullptr;
         socket->close();
         socket->deleteLater();
     }
     if (m_kickSocket) {
-        auto *socket = m_kickSocket;
+        auto *socket = m_kickSocket.data();
         m_kickSocket = nullptr;
         socket->close();
         socket->deleteLater();
@@ -1520,7 +1520,7 @@ void ChatController::stopYouTube()
 {
     m_youtubeTimer.stop();
     if (m_youtubeReply) {
-        auto *reply = m_youtubeReply;
+        auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
         reply->abort();
         reply->deleteLater();
@@ -1687,7 +1687,7 @@ void ChatController::clearSpeechQueue()
     m_speechQueue.clear();
     ++m_speechGeneration;
     if (m_ttsReply) {
-        auto *reply = m_ttsReply;
+        auto *reply = m_ttsReply.data();
         m_ttsReply = nullptr;
         reply->abort();
         reply->deleteLater();

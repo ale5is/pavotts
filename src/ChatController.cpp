@@ -253,6 +253,8 @@ void ChatController::connectAll()
     disconnectAll();
     m_stopping = false;
     m_twitchRejected = false; m_twitchRetryDelay = 3000; m_kickRetryDelay = 3000;
+    m_messages.clear();
+    emit messagesChanged();
     saveSettings();
     bool any = false;
     if (!m_twitchChannel.isEmpty() && !m_twitchUsername.isEmpty() && !m_twitchToken.isEmpty()) {
@@ -307,6 +309,10 @@ void ChatController::disconnectAll()
     }
     ++m_speechGeneration;
     m_player.stop();
+    if (!m_currentAudioFile.isEmpty()) {
+        QFile::remove(m_currentAudioFile);
+        m_currentAudioFile.clear();
+    }
     m_speechQueue.clear();
     m_speaking = false;
     emit speakingChanged();
@@ -578,7 +584,9 @@ void ChatController::connectYouTube()
         channel.prepend('@');
     const QUrl pageUrl(QStringLiteral("https://www.youtube.com/") + channel + QStringLiteral("/live"));
     setStatus(QStringLiteral("YouTube"), QStringLiteral("Buscando transmisión en vivo..."));
-    auto *reply = m_network.get(QNetworkRequest(pageUrl));
+    QNetworkRequest pageRequest(pageUrl);
+    pageRequest.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"));
+    auto *reply = m_network.get(pageRequest);
     m_youtubeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
@@ -619,6 +627,7 @@ void ChatController::pollYouTube()
                              .arg(jsonEscaped(m_youtubeClientVersion), jsonEscaped(m_youtubeContinuation));
     QNetworkRequest request{QUrl(endpoint)};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"));
     auto *reply = m_network.post(request, body.toUtf8());
     m_youtubeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {

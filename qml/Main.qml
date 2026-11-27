@@ -163,10 +163,8 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.margins: 14
                                 Label { text: "TWITCH"; color: "#b78cff"; font.bold: true; font.letterSpacing: 1.2 }
-                                Field { placeholderText: "Canal (ej. ale5is14)"; text: chat.twitchChannel; onTextEdited: chat.twitchChannel = text }
-                                Field { placeholderText: "Usuario de la cuenta"; text: chat.twitchUsername; onTextEdited: chat.twitchUsername = text }
-                                Field { placeholderText: "OAuth token (scope chat:read)"; echoMode: TextInput.Password; text: chat.twitchToken; onTextEdited: chat.twitchToken = text }
-                                Label { text: "El usuario debe coincidir con el token."; color: "#7f91a8"; font.pixelSize: 10; wrapMode: Text.Wrap }
+                                Field { placeholderText: "Nombre del canal (ej. ale5is14)"; text: chat.twitchChannel; onTextEdited: chat.twitchChannel = text }
+                                Label { text: "Lectura anónima por IRC/WebSocket. Solo lectura; algunos canales o restricciones pueden impedir el acceso."; color: "#7f91a8"; font.pixelSize: 10; wrapMode: Text.Wrap }
                             }
                         }
 

@@ -160,8 +160,6 @@ ChatController::~ChatController()
 QString ChatController::status() const { return m_status; }
 QVariantList ChatController::messages() const { return m_messages; }
 QString ChatController::twitchChannel() const { return m_twitchChannel; }
-QString ChatController::twitchUsername() const { return m_twitchUsername; }
-QString ChatController::twitchToken() const { return m_twitchToken; }
 QString ChatController::youtubeChannel() const { return m_youtubeChannel; }
 QString ChatController::kickChannel() const { return m_kickChannel; }
 QString ChatController::sessionId() const { return m_sessionId; }
@@ -181,8 +179,6 @@ QString ChatController::blacklistText() const
 }
 
 void ChatController::setTwitchChannel(const QString &v) { if (m_twitchChannel != v) { m_twitchChannel = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setTwitchUsername(const QString &v) { if (m_twitchUsername != v) { m_twitchUsername = v.trimmed(); emit settingsChanged(); } }
-void ChatController::setTwitchToken(const QString &v) { if (m_twitchToken != v) { m_twitchToken = v.trimmed(); emit settingsChanged(); } }
 void ChatController::setYoutubeChannel(const QString &v) { if (m_youtubeChannel != v) { m_youtubeChannel = v.trimmed(); emit settingsChanged(); } }
 void ChatController::setKickChannel(const QString &v) { if (m_kickChannel != v) { m_kickChannel = v.trimmed(); emit settingsChanged(); } }
 void ChatController::setSessionId(const QString &v) { if (m_sessionId != v) { m_sessionId = v.trimmed(); emit settingsChanged(); } }
@@ -203,8 +199,6 @@ void ChatController::loadSettings()
         return;
     const QJsonObject o = document.object();
     m_twitchChannel = o.value("twitchChannel").toString();
-    m_twitchUsername = o.value("twitchUsername").toString();
-    m_twitchToken = o.value("twitchAccessToken").toString();
     m_youtubeChannel = o.value("youtubeChannel").toString();
     m_kickChannel = o.value("kickChannel").toString();
     m_sessionId = o.value("sessionId").toString();
@@ -223,8 +217,6 @@ void ChatController::saveSettings()
 {
     QJsonObject o;
     o.insert("twitchChannel", m_twitchChannel);
-    o.insert("twitchUsername", m_twitchUsername);
-    o.insert("twitchAccessToken", m_twitchToken);
     o.insert("youtubeChannel", m_youtubeChannel);
     o.insert("kickChannel", m_kickChannel);
     o.insert("sessionId", m_sessionId);
@@ -577,16 +569,22 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         const QJsonDocument nested = QJsonDocument::fromJson(publication.value(QStringLiteral("data")).toString().toUtf8());
         envelope = nested.object();
     }
-    if (envelope.value(QStringLiteral("event")).toString() != QStringLiteral("App\\Events\\ChatMessageEvent"))
+    const QString eventName = envelope.value(QStringLiteral("event")).toString();
+    if (!eventName.contains(QStringLiteral("ChatMessage"), Qt::CaseInsensitive))
         return;
     QJsonObject data = envelope.value(QStringLiteral("data")).toObject();
     if (data.isEmpty() && envelope.value(QStringLiteral("data")).isString()) {
         const QJsonDocument nested = QJsonDocument::fromJson(envelope.value(QStringLiteral("data")).toString().toUtf8());
         data = nested.object();
     }
-    const QString message = data.value(QStringLiteral("content")).toString();
-    const QString name = data.value(QStringLiteral("sender")).toObject().value(QStringLiteral("username")).toString(QStringLiteral("Kick"));
-    if (!message.isEmpty())
+    const QJsonObject sender = data.value(QStringLiteral("sender")).toObject();
+    const QString message = data.value(QStringLiteral("content")).toString().trimmed();
+    QString name = sender.value(QStringLiteral("username")).toString();
+    if (name.isEmpty())
+        name = sender.value(QStringLiteral("slug")).toString();
+    if (name.isEmpty())
+        name = QStringLiteral("Kick");
+    if (!message.isEmpty() && message.size() <= 8192)
         publishMessage(name, message, QStringLiteral("Kick"));
 }
 

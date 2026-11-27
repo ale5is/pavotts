@@ -1082,7 +1082,7 @@ void ChatController::connectKick()
                     return;
                 }
                 setStatus(QStringLiteral("Kick"), QStringLiteral("Token recibido; abriendo WebSocket de Centrifugo..."));
-                auto *socket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+                auto *socket = new QWebSocket(QStringLiteral("https://kick.com"), QWebSocketProtocol::VersionLatest, this);
                 m_kickSocket = socket;
                 socket->setProperty("kickToken", token);
                 connect(socket, &QWebSocket::connected, this, [this, socket, generation]() {
@@ -1145,7 +1145,6 @@ void ChatController::connectKick()
                     scheduleKickRetry(QStringLiteral("Falló el WebSocket: ") + error);
                 });
                 QNetworkRequest wsRequest{QUrl(wsUrl)};
-                wsRequest.setRawHeader("Origin", "https://kick.com");
                 wsRequest.setRawHeader("User-Agent", "Mozilla/5.0");
                 socket->open(wsRequest);
             });

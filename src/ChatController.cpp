@@ -1576,7 +1576,8 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId, b
             m_youtubeContext.insert(QStringLiteral("client"), clientContext);
         }
         const QString ownerChannelId = findYouTubeVideoOwnerChannelId(root);
-        if (m_youtubeResolvedChannelId.isEmpty() || ownerChannelId != m_youtubeResolvedChannelId) {
+        if (m_youtubeResolvedChannelId.isEmpty()
+            || (!ownerChannelId.isEmpty() && ownerChannelId != m_youtubeResolvedChannelId)) {
             m_youtubeRejectedVideoIds.insert(videoId);
             if (allowChannelFallback && !m_youtubeResolvedChannelId.isEmpty()) {
                 const QString reason = ownerChannelId.isEmpty()

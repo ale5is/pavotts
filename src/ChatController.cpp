@@ -911,9 +911,9 @@ void ChatController::connectKick()
     // Resolve the chatroom using LiteKickChat's endpoint order. The generic
     // Centrifugo negotiation does not require the broadcaster channel ID.
     const QString lookupPath = m_kickLookupAttempt == 0
-        ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
+        ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
         : (m_kickLookupAttempt == 1
-            ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
+            ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
             : QStringLiteral("/api/v1/channels/%1").arg(encodedChannel));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com") + lookupPath)};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0"));
@@ -946,11 +946,16 @@ void ChatController::connectKick()
             return;
         }
         const QJsonObject lookup = doc.object();
-        const bool directChatroomResponse = m_kickLookupAttempt == 0;
+        const bool directChatroomResponse = m_kickLookupAttempt == 1;
+        const QJsonObject chatroom = lookup.value(QStringLiteral("chatroom")).toObject();
         const QString roomText = directChatroomResponse
             ? lookup.value(QStringLiteral("id")).toVariant().toString()
-            : lookup.value(QStringLiteral("chatroom")).toObject()
-                  .value(QStringLiteral("id")).toVariant().toString();
+            : chatroom.value(QStringLiteral("id")).toVariant().toString();
+        QString channelText = directChatroomResponse
+            ? lookup.value(QStringLiteral("chatable_id")).toVariant().toString()
+            : chatroom.value(QStringLiteral("chatable_id")).toVariant().toString();
+        if (channelText.isEmpty())
+            channelText = lookup.value(QStringLiteral("id")).toVariant().toString();
         bool roomOk = false;
         const qlonglong room = roomText.toLongLong(&roomOk);
         if (!roomOk || room <= 0) {
@@ -964,14 +969,17 @@ void ChatController::connectKick()
             return;
         }
         m_kickLookupAttempt = 0;
-        m_kickChannelId.clear();
+        m_kickChannelId = channelText;
         m_kickChatroomId = QString::number(room);
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
             {QStringLiteral("client"), QJsonObject{{QStringLiteral("id"), clientId}, {QStringLiteral("type"), QStringLiteral("web")}}},
             {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}}}}}
         };
-        QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/connection"))};
+        const QString realtimePath = m_kickChannelId.isEmpty()
+            ? QStringLiteral("/api/v1/realtime/connection")
+            : QStringLiteral("/api/v1/realtime/channels/%1/chat/connection").arg(m_kickChannelId);
+        QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com") + realtimePath)};
         post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         post.setRawHeader("Origin", "https://kick.com");
         post.setRawHeader("Referer", "https://kick.com/");

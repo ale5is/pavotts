@@ -1502,17 +1502,8 @@ void ChatController::requestYouTubeChannelStreams(const QString &channelId)
             return;
         }
 
-        const QJsonObject renderer = findLiveChatRenderer(root);
-        int delay = 0;
-        const QString continuation = findLiveChatContinuation(renderer, &delay);
-        if (!continuation.isEmpty()) {
-            m_youtubeContinuation = youtubeAllMessagesContinuation(continuation);
-            m_youtubePollDelay = delay > 0 ? delay : 3000;
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("Se encontró una continuación de chat en la pestaña de transmisiones; iniciando lectura."));
-            pollYouTube();
-            return;
-        }
-
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("La pestaña de transmisiones del canal no devolvió otro video LIVE válido; se mantiene el canal seleccionado."));
+        m_youtubeTimer.start(30000);
         setStatus(QStringLiteral("YouTube"), QStringLiteral("La pestaña de directos no devolvió ningún video con distintivo LIVE para el canal %1.").arg(channelId));
         m_youtubeTimer.start(30000);
     });

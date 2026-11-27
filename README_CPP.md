@@ -24,7 +24,7 @@ cmake --build build --config Release
 
 ## Android
 
-La misma base C++/QML está preparada para empaquetarse como APK arm64 (Android 9/API 28 o superior) con Qt for Android, Android SDK, NDK 26.1.10909125 y JDK 17. El workflow de GitHub Actions intenta compilar escritorio Linux/Windows y Android arm64.
+La misma base C++/QML está preparada para empaquetarse como APK arm64 (Android 9/API 28 o superior) con Qt for Android, Android SDK, NDK 26.1.10909125 y JDK 17. El workflow de GitHub Actions compila escritorio Linux/Windows y Android arm64; publica artefactos Linux, Windows con runtime Qt y APK Android firmado con la clave de depuración para pruebas (no es una firma de distribución para Play Store).
 
 No se debe considerar una plataforma compilada hasta que su job termine correctamente y el artefacto se instale y pruebe en un dispositivo real.
 

@@ -12,8 +12,7 @@ ApplicationWindow {
     visible: true
     title: "PavoTTS — Chat nativo"
     color: "#0b1019"
-    property bool settingsPage: !(chat.twitchChannel.length > 0 || chat.youtubeChannel.length > 0 || chat.kickChannel.length > 0)
-    property string platformFilter: "Todos"
+    property bool settingsPage: true
     property bool compact: width < 760
 
     component Panel: Rectangle {
@@ -284,64 +283,51 @@ ApplicationWindow {
                             Label { text: chat.messages.length + " mensajes"; color: "#8195ae"; font.pixelSize: 11 }
                             Button { text: "Limpiar"; onClicked: chat.clearChat() }
                         }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-                            Repeater {
-                                model: ["Todos", "YouTube", "Kick", "Twitch"]
-                                delegate: Button {
-                                    required property string modelData
-                                    Layout.fillWidth: true
-                                    text: modelData
-                                    checkable: true
-                                    checked: platformFilter === modelData
-                                    onClicked: platformFilter = modelData
-                                    contentItem: Text {
-                                        text: parent.text
-                                        color: parent.checked ? "#f4f7fb" : "#263449"
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    background: Rectangle {
-                                        radius: 9
-                                        color: parent.checked ? "#101722" : "#e5edf6"
-                                        border.width: parent.checked ? 1 : 0
-                                        border.color: "#33445a"
-                                    }
-                                }
-                            }
-                        }
                         ListView {
                             id: chatList
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             clip: true
-                            spacing: 10
-                            model: platformFilter === "Todos" ? chat.messages : chat.messages.filter(function(message) { return message.platform === platformFilter })
+                            spacing: 12
+                            model: chat.messages
                             delegate: Rectangle {
                                 required property var modelData
                                 width: ListView.view.width
-                                height: messageColumn.implicitHeight + 22
+                                height: messageColumn.implicitHeight + 30
                                 radius: 9
                                 color: "#0e1724"
                                 ColumnLayout {
                                     id: messageColumn
                                     anchors.fill: parent
-                                    anchors.margins: 12
+                                    anchors.margins: 16
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: modelData.name; color: "#e7effa"; font.bold: true; font.pixelSize: 15 }
-                                        Label {
-                                            text: modelData.platform
-                                            color: modelData.platform === "Twitch" ? "#b78cff" : (modelData.platform === "Kick" ? "#65e6a6" : "#ff7777")
-                                            font.pixelSize: 12
+                                        Rectangle {
+                                            radius: 6
+                                            color: modelData.platform === "Twitch" ? "#39265b" : (modelData.platform === "Kick" ? "#164a35" : "#572b32")
+                                            implicitWidth: platformName.implicitWidth + 18
+                                            implicitHeight: 30
+                                            Label {
+                                                id: platformName
+                                                anchors.centerIn: parent
+                                                text: modelData.platform.toUpperCase()
+                                                color: modelData.platform === "Twitch" ? "#d2b7ff" : (modelData.platform === "Kick" ? "#8bf0bd" : "#ffaaaa")
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                            }
                                         }
+                                        Label { text: modelData.name; color: "#ffffff"; font.bold: true; font.pixelSize: 18 }
                                         Item { Layout.fillWidth: true }
-                                        Label { text: modelData.time; color: "#62748b"; font.pixelSize: 10 }
+                                        Label { text: modelData.time; color: "#8294aa"; font.pixelSize: 11 }
                                     }
-                                    Label { Layout.fillWidth: true; text: modelData.text; color: "#e0e8f2"; wrapMode: Text.Wrap; font.pixelSize: 15 }
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.text
+                                        color: "#f0f5fc"
+                                        wrapMode: Text.Wrap
+                                        font.pixelSize: 21
+                                        font.weight: Font.Medium
+                                    }
                                 }
                             }
                             onCountChanged: Qt.callLater(function() { chatList.positionViewAtEnd() })

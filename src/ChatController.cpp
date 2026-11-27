@@ -493,6 +493,10 @@ QString findYouTubeVideoOwnerChannelId(const QJsonValue &value)
 {
     if (value.isObject()) {
         const QJsonObject object = value.toObject();
+        const QString detailsChannelId = object.value(QStringLiteral("videoDetails")).toObject()
+                                             .value(QStringLiteral("channelId")).toString();
+        if (isYouTubeChannelId(detailsChannelId))
+            return detailsChannelId;
         const QJsonObject owner = object.value(QStringLiteral("videoOwnerRenderer")).toObject();
         if (!owner.isEmpty()) {
             const QString channelId = owner.value(QStringLiteral("navigationEndpoint")).toObject()
@@ -930,6 +934,7 @@ void ChatController::connectKick()
     m_kickLeaseTimer.stop();
     m_kickHeartbeatTimer.stop();
     m_kickSubscribed = false;
+    m_kickConnectAcknowledged = false;
     m_kickChannelId.clear();
     m_kickChatroomId.clear();
     const quint64 generation = m_connectionGeneration;
@@ -1089,8 +1094,15 @@ void ChatController::connectKick()
                     if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
                     m_kickLastActivity.start();
                     m_kickHeartbeatTimer.start();
-                    socket->sendTextMessage(QStringLiteral("{\"id\":1,\"connect\":{\"token\":\"%1\",\"name\":\"js\"}}")
-                                                .arg(jsonEscaped(socket->property("kickToken").toString())));
+                    const QJsonObject connectCommand{
+                        {QStringLiteral("id"), 1},
+                        {QStringLiteral("connect"), QJsonObject{
+                            {QStringLiteral("token"), socket->property("kickToken").toString()},
+                            {QStringLiteral("name"), QStringLiteral("js")}
+                        }}
+                    };
+                    socket->sendTextMessage(QString::fromUtf8(
+                        QJsonDocument(connectCommand).toJson(QJsonDocument::Compact)));
                     setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticando realtime..."));
                     m_kickHandshakeTimer.start(20000);
                 });
@@ -1174,6 +1186,7 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         return;
     }
     if (frame.value(QStringLiteral("id")).toInt() == 1 && frame.contains(QStringLiteral("connect"))) {
+        m_kickConnectAcknowledged = true;
         const QJsonObject connectInfo = frame.value(QStringLiteral("connect")).toObject();
         const int pingSeconds = connectInfo.value(QStringLiteral("ping")).toInt();
         const int heartbeatTimeout = pingSeconds > 0
@@ -1187,8 +1200,14 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         m_kickLastActivity.restart();
         m_kickHeartbeatTimer.setInterval(heartbeatTimeout);
         m_kickHeartbeatTimer.start();
-        const QString subscription = QStringLiteral("{\"id\":2,\"subscribe\":{\"channel\":\"chatrooms.%1.v2\"}}").arg(m_kickChatroomId);
-        socket->sendTextMessage(subscription);
+        const QJsonObject subscribeCommand{
+            {QStringLiteral("id"), 2},
+            {QStringLiteral("subscribe"), QJsonObject{
+                {QStringLiteral("channel"), QStringLiteral("chatrooms.%1.v2").arg(m_kickChatroomId)}
+            }}
+        };
+        socket->sendTextMessage(QString::fromUtf8(
+            QJsonDocument(subscribeCommand).toJson(QJsonDocument::Compact)));
         setStatus(QStringLiteral("Kick"), QStringLiteral("Autenticado; suscribiendo al chat..."));
         return;
     }
@@ -1211,9 +1230,16 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         const QJsonObject disconnect = push.value(QStringLiteral("disconnect")).toObject();
         const QString code = disconnect.value(QStringLiteral("code")).toVariant().toString();
         const QString message = disconnect.value(QStringLiteral("message")).toString();
-        setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo cerró la conexión (%1): %2")
+        const QString phase = !m_kickConnectAcknowledged
+            ? QStringLiteral("antes de confirmar connect")
+            : (!m_kickSubscribed ? QStringLiteral("después de connect y durante subscribe")
+                                 : QStringLiteral("con la suscripción activa"));
+        const QString diagnostic = code == QStringLiteral("3501")
+            ? QStringLiteral("; Centrifugo 3501 significa que rechazó un frame del protocolo JSON (%1)").arg(phase)
+            : QString();
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo cerró la conexión (%1): %2%3")
                       .arg(code.isEmpty() ? QStringLiteral("sin código") : code,
-                           message.isEmpty() ? QStringLiteral("sin descripción") : message.left(200)));
+                           message.isEmpty() ? QStringLiteral("sin descripción") : message.left(200), diagnostic));
         socket->close();
         return;
     }
@@ -1261,6 +1287,7 @@ void ChatController::connectYouTube()
     m_youtubeSeenIds.clear();
     m_youtubeSeenOrder.clear();
     m_youtubeRejectedVideoIds.clear();
+    m_youtubeBaselineReady = false;
     m_youtubeResolvedChannelId.clear();
     m_youtubeResolvedHandle.clear();
 
@@ -1580,8 +1607,8 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId, b
             m_youtubeContext.insert(QStringLiteral("client"), clientContext);
         }
         const QString ownerChannelId = findYouTubeVideoOwnerChannelId(root);
-        if (m_youtubeResolvedChannelId.isEmpty()
-            || (!ownerChannelId.isEmpty() && ownerChannelId != m_youtubeResolvedChannelId)) {
+        if (m_youtubeResolvedChannelId.isEmpty() || ownerChannelId.isEmpty()
+            || ownerChannelId != m_youtubeResolvedChannelId) {
             m_youtubeRejectedVideoIds.insert(videoId);
             if (allowChannelFallback && !m_youtubeResolvedChannelId.isEmpty()) {
                 const QString reason = ownerChannelId.isEmpty()
@@ -1710,20 +1737,22 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
 {
     QList<QVariantMap> found;
     collectYouTubeMessages(root, found);
+    const bool establishBaseline = !m_youtubeBaselineReady;
     for (const QVariantMap &entry : found) {
         const QString id = entry.value(QStringLiteral("id")).toString();
-        if (!id.isEmpty()) {
-            if (m_youtubeSeenIds.contains(id))
-                continue;
-            m_youtubeSeenIds.insert(id);
-            m_youtubeSeenOrder.enqueue(id);
-            while (m_youtubeSeenOrder.size() > 2048)
-                m_youtubeSeenIds.remove(m_youtubeSeenOrder.dequeue());
-        }
+        if (id.isEmpty() || m_youtubeSeenIds.contains(id))
+            continue;
+        m_youtubeSeenIds.insert(id);
+        m_youtubeSeenOrder.enqueue(id);
+        while (m_youtubeSeenOrder.size() > 2048)
+            m_youtubeSeenIds.remove(m_youtubeSeenOrder.dequeue());
+        if (establishBaseline)
+            continue;
         publishMessage(entry.value(QStringLiteral("name")).toString(),
                        entry.value(QStringLiteral("text")).toString(),
                        QStringLiteral("YouTube"));
     }
+    m_youtubeBaselineReady = true;
 
     const QJsonObject liveChat = root.value(QStringLiteral("continuationContents")).toObject()
                                      .value(QStringLiteral("liveChatContinuation")).toObject();

@@ -57,7 +57,7 @@ QString jsonEscaped(const QString &value)
     return QString::fromUtf8(json.mid(1, json.size() - 2));
 }
 
-void collectYouTubeMessages(const QJsonValue &value, QList<QPair<QString, QString>> &messages)
+void collectYouTubeMessages(const QJsonValue &value, QList<QVariantMap> &messages)
 {
     if (value.isArray()) {
         for (const QJsonValue &child : value.toArray())
@@ -97,7 +97,7 @@ void collectYouTubeMessages(const QJsonValue &value, QList<QPair<QString, QStrin
             message = renderer.value(QStringLiteral("headerSubtext")).toObject()
                           .value(QStringLiteral("simpleText")).toString();
         if (!message.isEmpty())
-            messages.append(qMakePair(name, message));
+            messages.append(QVariantMap{{QStringLiteral("id"), renderer.value(QStringLiteral("id")).toString()}, {QStringLiteral("name"), name}, {QStringLiteral("text"), message}});
     }
     for (auto it = object.begin(); it != object.end(); ++it)
         collectYouTubeMessages(it.value(), messages);
@@ -591,6 +591,8 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
 void ChatController::connectYouTube()
 {
     stopYouTube();
+    m_youtubeSeenIds.clear();
+    m_youtubeSeenOrder.clear();
     QString channel = m_youtubeChannel.trimmed();
     if (!channel.startsWith('@') && !channel.startsWith(QStringLiteral("UC")))
         channel.prepend('@');
@@ -663,10 +665,22 @@ void ChatController::pollYouTube()
 
 void ChatController::parseYouTubeResponse(const QJsonObject &root)
 {
-    QList<QPair<QString, QString>> found;
+    QList<QVariantMap> found;
     collectYouTubeMessages(root, found);
-    for (const auto &entry : found)
-        publishMessage(entry.first, entry.second, QStringLiteral("YouTube"));
+    for (const QVariantMap &entry : found) {
+        const QString id = entry.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            if (m_youtubeSeenIds.contains(id))
+                continue;
+            m_youtubeSeenIds.insert(id);
+            m_youtubeSeenOrder.enqueue(id);
+            while (m_youtubeSeenOrder.size() > 2048)
+                m_youtubeSeenIds.remove(m_youtubeSeenOrder.dequeue());
+        }
+        publishMessage(entry.value(QStringLiteral("name")).toString(),
+                       entry.value(QStringLiteral("text")).toString(),
+                       QStringLiteral("YouTube"));
+    }
 
     std::function<QString(const QJsonValue &)> findContinuation = [&](const QJsonValue &value) -> QString {
         if (value.isObject()) {

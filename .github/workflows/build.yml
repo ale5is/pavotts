@@ -34,14 +34,6 @@ jobs:
 
   windows-desktop:
     runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: gui
-            gui_subsystem: ON
-          - variant: console
-            gui_subsystem: OFF
     steps:
       - uses: actions/checkout@v4
       - uses: jurplel/install-qt-action@v4
@@ -53,17 +45,47 @@ jobs:
           modules: qtmultimedia qtwebsockets
           cache: true
       - uses: ilammy/msvc-dev-cmd@v1
-      - name: Configure Windows variant
-        run: cmake -S . -B build-${{ matrix.variant }} -DCMAKE_BUILD_TYPE=Release -DPAVOTTS_WINDOWS_GUI_SUBSYSTEM=${{ matrix.gui_subsystem }}
-      - name: Build Windows variant
-        run: cmake --build build-${{ matrix.variant }} --config Release --parallel
+      - name: Configure Windows Release GUI
+        run: cmake -S . -B build-windows -DCMAKE_BUILD_TYPE=Release -DPAVOTTS_WINDOWS_GUI_SUBSYSTEM=ON
+      - name: Build Windows Release GUI
+        run: cmake --build build-windows --config Release --parallel
       - name: Deploy Qt runtime
-        run: windeployqt --qmldir qml build-${{ matrix.variant }}/Release/PavoTTSNative.exe
-      - name: Upload Windows application
+        run: windeployqt --qmldir qml build-windows/Release/PavoTTSNative.exe
+      - name: Include default configuration
+        shell: pwsh
+        run: Copy-Item config.default build-windows/Release/.config
+      - name: Upload Windows Release package
         uses: actions/upload-artifact@v4
         with:
-          name: pavotts-windows-x64-${{ matrix.variant }}
-          path: build-${{ matrix.variant }}/Release/
+          name: pavotts-windows-x64
+          path: build-windows/Release/
+          include-hidden-files: true
+
+  publish-windows-release:
+    if: github.event_name != 'pull_request'
+    needs: windows-desktop
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: pavotts-windows-x64
+          path: release/PavoTTS
+      - name: Create ZIP
+        run: |
+          cd release
+          zip -r PavoTTS-Windows-x64.zip PavoTTS
+      - name: Publish rolling GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: PavoTTS Windows x64 - última compilación
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          files: release/PavoTTS-Windows-x64.zip
 
   android-arm64:
     runs-on: ubuntu-24.04

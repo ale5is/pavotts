@@ -436,7 +436,13 @@ void ChatController::connectKick()
     m_kickSubscribed = false;
     const quint64 generation = m_connectionGeneration;
     setStatus(QStringLiteral("Kick"), QStringLiteral("Resolviendo el canal..."));
-    QNetworkRequest request{QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + QString::fromLatin1(QUrl::toPercentEncoding(m_kickChannel)))};
+    const QString encodedChannel = QString::fromLatin1(QUrl::toPercentEncoding(m_kickChannel));
+    const QString lookupPath = m_kickLookupAttempt == 0
+        ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
+        : (m_kickLookupAttempt == 1
+            ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
+            : QStringLiteral("/api/v1/channels/%1").arg(encodedChannel));
+    QNetworkRequest request{QUrl(QStringLiteral("https://kick.com") + lookupPath)};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"));
     request.setRawHeader("Accept", "application/json");
     auto *reply = m_network.get(request);
@@ -448,11 +454,32 @@ void ChatController::connectKick()
         const QJsonDocument doc = QJsonDocument::fromJson(bytes);
         reply->deleteLater();
         if (!doc.isObject() || code < 200 || code >= 300) {
-            scheduleKickRetry(QStringLiteral("No se pudo resolver el canal: ") + error + QStringLiteral(" (HTTP %1)").arg(code));
+            if (m_kickLookupAttempt < 2) {
+                ++m_kickLookupAttempt;
+                connectKick();
+            } else {
+                m_kickLookupAttempt = 0;
+                scheduleKickRetry(QStringLiteral("No se pudo resolver el canal: ") + error + QStringLiteral(" (HTTP %1)").arg(code));
+            }
             return;
         }
-        const int room = doc.object().value(QStringLiteral("chatroom")).toObject().value(QStringLiteral("id")).toInt();
-        if (room <= 0) { scheduleKickRetry(QStringLiteral("No se obtuvo chatroom ID.")); return; }
+        const QJsonObject lookup = doc.object();
+        QString roomText = lookup.value(QStringLiteral("id")).toVariant().toString();
+        if (roomText.isEmpty())
+            roomText = lookup.value(QStringLiteral("chatroom")).toObject().value(QStringLiteral("id")).toVariant().toString();
+        bool roomOk = false;
+        const int room = roomText.toInt(&roomOk);
+        if (!roomOk || room <= 0) {
+            if (m_kickLookupAttempt < 2) {
+                ++m_kickLookupAttempt;
+                connectKick();
+            } else {
+                m_kickLookupAttempt = 0;
+                scheduleKickRetry(QStringLiteral("Las tres rutas de Kick no devolvieron un chatroom ID."));
+            }
+            return;
+        }
+        m_kickLookupAttempt = 0;
         m_kickChatroomId = QString::number(room);
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{

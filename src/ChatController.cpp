@@ -1266,10 +1266,12 @@ void ChatController::connectYouTube()
 
         if (videoId.isEmpty()) {
             const QJsonObject renderer = findLiveChatRenderer(initialData);
-            m_youtubeContinuation = findLiveChatContinuation(renderer);
-            if (!m_youtubeContinuation.isEmpty()) {
+            int pageDelay = 0;
+            const QString pageContinuation = findLiveChatContinuation(renderer, &pageDelay);
+            if (!pageContinuation.isEmpty()) {
+                m_youtubeContinuation = youtubeAllMessagesContinuation(pageContinuation);
                 setStatus(QStringLiteral("YouTube"), QStringLiteral("Se encontró una continuación de chat en la página; iniciando lectura."));
-                m_youtubePollDelay = 1000;
+                m_youtubePollDelay = pageDelay > 0 ? pageDelay : 3000;
                 pollYouTube();
                 return;
             }
@@ -1489,6 +1491,8 @@ void ChatController::pollYouTube()
 
         if (failed) {
             m_youtubeConnected = false;
+            if (code == 400 || code == 404)
+                m_youtubeContinuation.clear();
             setConnectedState();
             const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
             setStatus(QStringLiteral("YouTube"), QStringLiteral("InnerTube rechazó la consulta (HTTP %1): %2. Respuesta: %3")
@@ -1508,6 +1512,7 @@ void ChatController::pollYouTube()
         const QJsonObject root = document.object();
         if (root.contains(QStringLiteral("error"))) {
             m_youtubeConnected = false;
+            m_youtubeContinuation.clear();
             setConnectedState();
             const QJsonObject apiError = root.value(QStringLiteral("error")).toObject();
             setStatus(QStringLiteral("YouTube"), QStringLiteral("Error InnerTube: %1").arg(apiError.value(QStringLiteral("message")).toString(QStringLiteral("respuesta de error"))));

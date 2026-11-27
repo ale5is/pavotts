@@ -960,7 +960,7 @@ void ChatController::connectKick()
     request.setRawHeader("Referer", "https://kick.com/");
 
     auto *reply = m_network.get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, lookupIndex]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, lookupIndex, kickSlug]() {
         if (m_stopping || generation != m_connectionGeneration) {
             reply->deleteLater();
             return;

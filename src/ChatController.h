@@ -119,7 +119,7 @@ private:
     QString m_youtubeResolvedChannelId, m_youtubeResolvedHandle;
     QJsonObject m_youtubeContext;
     int m_kickLookupAttempt = 0;
-    QSet<QString> m_youtubeSeenIds;
+    QSet<QString> m_youtubeSeenIds, m_youtubeRejectedVideoIds;
     QQueue<QString> m_youtubeSeenOrder;
     int m_youtubePollDelay = 5000;
     bool m_stopping = false, m_connected = false, m_speaking = false;

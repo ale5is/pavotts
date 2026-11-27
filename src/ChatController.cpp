@@ -406,6 +406,9 @@ void ChatController::disconnectAll()
     m_twitchHandshakeTimer.stop(); m_kickHandshakeTimer.stop(); m_kickLeaseTimer.stop();
     m_twitchAuthenticated = false; m_kickSubscribed = false;
     m_twitchBuffer.clear();
+    setStatus(QStringLiteral("Twitch"), QStringLiteral("Desconectado."));
+    setStatus(QStringLiteral("Kick"), QStringLiteral("Desconectado."));
+    setStatus(QStringLiteral("YouTube"), QStringLiteral("Desconectado."));
     if (m_youtubeReply) {
         auto *reply = m_youtubeReply.data();
         m_youtubeReply = nullptr;
@@ -678,8 +681,24 @@ void ChatController::connectKick()
                 });
                 connect(socket, &QWebSocket::textMessageReceived, this, [this, socket, generation](const QString &text) {
                     if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration) return;
-                    const QJsonDocument frame = QJsonDocument::fromJson(text.toUtf8());
-                    if (frame.isObject()) handleKickFrame(frame.object(), socket);
+                    const QByteArray payload = text.toUtf8();
+                    QJsonParseError parseError;
+                    const QJsonDocument frame = QJsonDocument::fromJson(payload, &parseError);
+                    if (frame.isObject()) {
+                        handleKickFrame(frame.object(), socket);
+                    } else if (frame.isArray()) {
+                        for (const QJsonValue &entry : frame.array()) {
+                            if (entry.isObject())
+                                handleKickFrame(entry.toObject(), socket);
+                        }
+                    } else if (text.contains(QLatin1Char('\n'))) {
+                        const QList<QByteArray> lines = payload.split('\n');
+                        for (const QByteArray &line : lines) {
+                            const QJsonDocument part = QJsonDocument::fromJson(line.trimmed());
+                            if (part.isObject())
+                                handleKickFrame(part.object(), socket);
+                        }
+                    }
                 });
                 connect(socket, &QWebSocket::disconnected, this, [this, socket, generation]() {
                     if (m_kickSocket == socket && generation == m_connectionGeneration) {
@@ -766,6 +785,7 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
 void ChatController::connectYouTube()
 {
     stopYouTube();
+    setConnectedState();
     m_youtubeSeenIds.clear();
     m_youtubeSeenOrder.clear();
 

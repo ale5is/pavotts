@@ -71,31 +71,68 @@ jobs:
           path: build-${{ matrix.variant }}/Release/
           include-hidden-files: true
 
-  publish-windows-release:
+  publish-release:
     if: github.event_name != 'pull_request'
-    needs: windows-desktop
+    needs:
+      - linux-desktop
+      - windows-desktop
+      - android-arm64
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Download Windows GUI Release package
+      - name: Download Windows GUI package
         uses: actions/download-artifact@v4
         with:
           name: pavotts-windows-x64-gui-release
-          path: release/PavoTTS
-      - name: Create ZIP
+          path: packages/windows-gui
+      - name: Download Windows Console package
+        uses: actions/download-artifact@v4
+        with:
+          name: pavotts-windows-x64-console-release
+          path: packages/windows-console
+      - name: Download Linux package
+        uses: actions/download-artifact@v4
+        with:
+          name: pavotts-linux-x64-release
+          path: packages/linux
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: pavotts-android-arm64-release
+          path: packages/android
+      - name: Package Release assets
+        shell: bash
         run: |
-          cd release
-          zip -r PavoTTS-Windows-x64.zip PavoTTS
+          set -euo pipefail
+          mkdir -p release
+          cd packages
+          zip -r ../release/PavoTTS-Windows-x64-GUI.zip windows-gui
+          zip -r ../release/PavoTTS-Windows-x64-Console.zip windows-console
+          zip -r ../release/PavoTTS-Linux-x64.zip linux
+          APK="$(find android -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          cp "$APK" ../release/PavoTTS-Android-arm64.apk
       - name: Publish rolling GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous
-          name: PavoTTS Windows x64 - última compilación Release
+          name: PavoTTS - última compilación Release
+          body: |
+            Compilaciones Release automáticas de la rama rewrite/cpp-qt-cross-platform.
+
+            - Windows GUI: sin ventana de consola.
+            - Windows Console: con ventana de consola para diagnóstico.
+            - Linux x64.
+            - Android ARM64 (APK).
           prerelease: true
           make_latest: false
           overwrite_files: true
-          files: release/PavoTTS-Windows-x64.zip
+          files: |
+            release/PavoTTS-Windows-x64-GUI.zip
+            release/PavoTTS-Windows-x64-Console.zip
+            release/PavoTTS-Linux-x64.zip
+            release/PavoTTS-Android-arm64.apk
 
   android-arm64:
     runs-on: ubuntu-24.04

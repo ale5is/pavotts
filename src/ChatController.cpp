@@ -1120,7 +1120,10 @@ void ChatController::connectKick()
                         m_kickLeaseTimer.stop();
                         m_kickHeartbeatTimer.stop();
                         setConnectedState();
-                        scheduleKickRetry(QStringLiteral("Conexión cerrada."));
+                        const QString closeDetail = QStringLiteral("WebSocket cerrado (código %1): %2")
+                            .arg(static_cast<int>(socket->closeCode()))
+                            .arg(socket->closeReason().isEmpty() ? QStringLiteral("sin motivo informado") : socket->closeReason().left(180));
+                        scheduleKickRetry(closeDetail);
                     }
                 });
                 connect(socket, &QWebSocket::sslErrors, this, [this, socket, generation](const QList<QSslError> &errors) {
@@ -1216,9 +1219,11 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
     }
     if (push.contains(QStringLiteral("unsubscribe"))) {
         const QJsonObject unsubscribe = push.value(QStringLiteral("unsubscribe")).toObject();
+        const QString code = unsubscribe.value(QStringLiteral("code")).toVariant().toString();
         const QString message = unsubscribe.value(QStringLiteral("message")).toString();
-        setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo canceló la suscripción: %1")
-                      .arg(message.isEmpty() ? QStringLiteral("sin descripción") : message.left(200)));
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo canceló la suscripción (código %1): %2")
+                      .arg(code.isEmpty() ? QStringLiteral("sin código") : code,
+                           message.isEmpty() ? QStringLiteral("sin descripción") : message.left(200)));
         socket->close();
         return;
     }

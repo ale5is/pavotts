@@ -121,6 +121,141 @@ QString findContinuationToken(const QJsonValue &value)
 }
 
 
+struct YouTubeProtoField {
+    quint64 number = 0;
+    quint8 wire = 0;
+    quint64 varint = 0;
+    QByteArray data;
+};
+
+bool readYouTubeVarint(const QByteArray &bytes, qsizetype &position, quint64 &value)
+{
+    value = 0;
+    for (int index = 0; index < 10 && position < bytes.size(); ++index) {
+        const quint8 byte = static_cast<quint8>(bytes.at(position++));
+        if (index == 9 && byte > 1)
+            return false;
+        value |= static_cast<quint64>(byte & 0x7f) << (index * 7);
+        if ((byte & 0x80) == 0)
+            return true;
+    }
+    return false;
+}
+
+void appendYouTubeVarint(QByteArray &bytes, quint64 value)
+{
+    while (value >= 0x80) {
+        bytes.append(static_cast<char>((value & 0x7f) | 0x80));
+        value >>= 7;
+    }
+    bytes.append(static_cast<char>(value));
+}
+
+bool decodeYouTubeProto(const QByteArray &bytes, QList<YouTubeProtoField> &fields)
+{
+    qsizetype position = 0;
+    while (position < bytes.size()) {
+        quint64 tag = 0;
+        if (!readYouTubeVarint(bytes, position, tag) || tag == 0)
+            return false;
+
+        YouTubeProtoField field;
+        field.number = tag >> 3;
+        field.wire = static_cast<quint8>(tag & 7);
+        if (field.number == 0)
+            return false;
+
+        if (field.wire == 0) {
+            if (!readYouTubeVarint(bytes, position, field.varint))
+                return false;
+        } else if (field.wire == 2) {
+            quint64 length = 0;
+            if (!readYouTubeVarint(bytes, position, length)
+                || length > static_cast<quint64>(bytes.size() - position))
+                return false;
+            field.data = bytes.mid(position, static_cast<qsizetype>(length));
+            position += static_cast<qsizetype>(length);
+        } else if (field.wire == 1 || field.wire == 5) {
+            const qsizetype length = field.wire == 1 ? 8 : 4;
+            if (bytes.size() - position < length)
+                return false;
+            field.data = bytes.mid(position, length);
+            position += length;
+        } else {
+            return false;
+        }
+        fields.append(field);
+    }
+    return true;
+}
+
+QByteArray encodeYouTubeProto(const QList<YouTubeProtoField> &fields)
+{
+    QByteArray encoded;
+    for (const YouTubeProtoField &field : fields) {
+        appendYouTubeVarint(encoded, (field.number << 3) | field.wire);
+        if (field.wire == 0) {
+            appendYouTubeVarint(encoded, field.varint);
+        } else if (field.wire == 2) {
+            appendYouTubeVarint(encoded, static_cast<quint64>(field.data.size()));
+            encoded.append(field.data);
+        } else {
+            encoded.append(field.data);
+        }
+    }
+    return encoded;
+}
+
+QString youtubeAllMessagesContinuation(const QString &continuation)
+{
+    if (continuation.isEmpty())
+        return continuation;
+
+    const QByteArray decoded = QByteArray::fromBase64(
+        continuation.toLatin1(), QByteArray::Base64UrlEncoding);
+    if (decoded.isEmpty())
+        return continuation;
+
+    QList<YouTubeProtoField> outer;
+    if (!decodeYouTubeProto(decoded, outer))
+        return continuation;
+
+    bool changed = false;
+    for (YouTubeProtoField &outerField : outer) {
+        if (outerField.number != 119693434 || outerField.wire != 2)
+            continue;
+
+        QList<YouTubeProtoField> entity;
+        if (!decodeYouTubeProto(outerField.data, entity))
+            return continuation;
+
+        for (YouTubeProtoField &entityField : entity) {
+            if (entityField.number == 13 && entityField.wire == 0) {
+                entityField.varint = 1;
+                changed = true;
+            } else if (entityField.number == 16 && entityField.wire == 2) {
+                QList<YouTubeProtoField> chatType;
+                if (!decodeYouTubeProto(entityField.data, chatType))
+                    return continuation;
+                for (YouTubeProtoField &chatTypeField : chatType) {
+                    if (chatTypeField.number == 1 && chatTypeField.wire == 0) {
+                        chatTypeField.varint = 1;
+                        changed = true;
+                    }
+                }
+                entityField.data = encodeYouTubeProto(chatType);
+            }
+        }
+        outerField.data = encodeYouTubeProto(entity);
+    }
+
+    if (!changed)
+        return continuation;
+
+    return QString::fromLatin1(encodeYouTubeProto(outer).toBase64(
+        QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+}
+
 QString findYouTubeVideoId(const QJsonValue &value)
 {
     if (value.isObject()) {
@@ -983,7 +1118,7 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
             return;
         }
 
-        m_youtubeContinuation = continuation;
+        m_youtubeContinuation = youtubeAllMessagesContinuation(continuation);
         m_youtubePollDelay = 1000;
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Continuación live-position obtenida; consultando el chat."));
         setConnectedState();
@@ -1104,7 +1239,7 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
     };
     const QString next = findContinuation(root);
     if (!next.isEmpty()) {
-        m_youtubeContinuation = next;
+        m_youtubeContinuation = youtubeAllMessagesContinuation(next);
         m_youtubePollDelay = 3000;
     } else {
         m_youtubeContinuation.clear();

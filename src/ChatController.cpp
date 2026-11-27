@@ -448,6 +448,7 @@ void ChatController::connectTwitch()
         setStatus(QStringLiteral("Twitch"), QStringLiteral("Conectado; entrando al chat anónimamente..."));
         const quint32 randomNick = QRandomGenerator::global()->bounded(100000000u, 999999999u);
         const QString anonymousNick = QStringLiteral("justinfan%1").arg(randomNick);
+        socket->sendTextMessage(QStringLiteral("PASS SCHMOOPIIE\r\n"));
         socket->sendTextMessage(QStringLiteral("NICK %1\r\n").arg(anonymousNick));
         socket->sendTextMessage(QStringLiteral("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n"));
         socket->sendTextMessage(QStringLiteral("JOIN #%1\r\n").arg(m_twitchChannel));

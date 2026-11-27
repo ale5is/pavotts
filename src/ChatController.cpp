@@ -120,6 +120,31 @@ QString findContinuationToken(const QJsonValue &value)
     return {};
 }
 
+int findYouTubePollingDelay(const QJsonValue &value)
+{
+    if (value.isObject()) {
+        const QJsonObject object = value.toObject();
+        const QJsonValue timeout = object.value(QStringLiteral("timeoutMs"));
+        if (timeout.isDouble()) {
+            const int milliseconds = timeout.toInt();
+            if (milliseconds > 0)
+                return qBound(1000, milliseconds, 60000);
+        }
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            const int nested = findYouTubePollingDelay(it.value());
+            if (nested > 0)
+                return nested;
+        }
+    } else if (value.isArray()) {
+        for (const QJsonValue &child : value.toArray()) {
+            const int nested = findYouTubePollingDelay(child);
+            if (nested > 0)
+                return nested;
+        }
+    }
+    return 0;
+}
+
 
 struct YouTubeProtoField {
     quint64 number = 0;
@@ -1242,7 +1267,8 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
     const QString next = findContinuation(root);
     if (!next.isEmpty()) {
         m_youtubeContinuation = youtubeAllMessagesContinuation(next);
-        m_youtubePollDelay = 3000;
+        const int serverDelay = findYouTubePollingDelay(root);
+        m_youtubePollDelay = serverDelay > 0 ? serverDelay : 3000;
     } else {
         m_youtubeContinuation.clear();
         m_youtubePollDelay = 30000;

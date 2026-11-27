@@ -552,7 +552,7 @@ void collectYouTubeMessages(const QJsonValue &value, QList<QVariantMap> &message
             message = renderer.value(QStringLiteral("headerSubtext")).toObject()
                           .value(QStringLiteral("simpleText")).toString();
         if (!message.isEmpty())
-            messages.append(QVariantMap{{QStringLiteral("id"), renderer.value(QStringLiteral("id")).toString()}, {QStringLiteral("name"), name}, {QStringLiteral("text"), message}});
+            messages.append(QVariantMap{{QStringLiteral("id"), renderer.value(QStringLiteral("id")).toString()}, {QStringLiteral("timestampUsec"), renderer.value(QStringLiteral("timestampUsec")).toString()}, {QStringLiteral("name"), name}, {QStringLiteral("text"), message}});
     }
     for (auto it = object.begin(); it != object.end(); ++it)
         collectYouTubeMessages(it.value(), messages);
@@ -1280,6 +1280,7 @@ void ChatController::connectYouTube()
     m_youtubeSeenOrder.clear();
     m_youtubeRejectedVideoIds.clear();
     m_youtubeBaselineReady = false;
+    m_youtubeConnectedAtUsec = 0;
     m_youtubeResolvedChannelId.clear();
     m_youtubeResolvedHandle.clear();
 
@@ -1633,6 +1634,8 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId, b
             return;
         }
 
+        m_youtubeConnectedAtUsec = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() * 1000;
+        m_youtubeBaselineReady = true;
         m_youtubeContinuation = youtubeAllMessagesContinuation(continuation);
         m_youtubePollDelay = initialDelay > 0 ? initialDelay : 3000;
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Continuación live-position obtenida; consultando el chat."));
@@ -1729,7 +1732,6 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
 {
     QList<QVariantMap> found;
     collectYouTubeMessages(root, found);
-    const bool establishBaseline = !m_youtubeBaselineReady;
     for (const QVariantMap &entry : found) {
         const QString id = entry.value(QStringLiteral("id")).toString();
         if (id.isEmpty() || m_youtubeSeenIds.contains(id))
@@ -1738,8 +1740,13 @@ void ChatController::parseYouTubeResponse(const QJsonObject &root)
         m_youtubeSeenOrder.enqueue(id);
         while (m_youtubeSeenOrder.size() > 2048)
             m_youtubeSeenIds.remove(m_youtubeSeenOrder.dequeue());
-        if (establishBaseline)
+
+        bool timestampOk = false;
+        const qint64 messageTimestampUsec =
+            entry.value(QStringLiteral("timestampUsec")).toString().toLongLong(&timestampOk);
+        if (!timestampOk || messageTimestampUsec <= m_youtubeConnectedAtUsec)
             continue;
+
         publishMessage(entry.value(QStringLiteral("name")).toString(),
                        entry.value(QStringLiteral("text")).toString(),
                        QStringLiteral("YouTube"));

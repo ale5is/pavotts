@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QDateTime>
+#include <QRandomGenerator>
 #include <QUuid>
 #include <functional>
 
@@ -267,7 +268,7 @@ void ChatController::connectAll()
     emit messagesChanged();
     saveSettings();
     bool any = false;
-    if (!m_twitchChannel.isEmpty() && !m_twitchUsername.isEmpty() && !m_twitchToken.isEmpty()) {
+    if (!m_twitchChannel.isEmpty()) {
         connectTwitch();
         any = true;
     }
@@ -351,9 +352,10 @@ void ChatController::connectTwitch()
     m_twitchSocket = socket;
     connect(socket, &QWebSocket::connected, this, [this, socket]() {
         if (m_twitchSocket != socket || m_stopping) return;
-        setStatus(QStringLiteral("Twitch"), QStringLiteral("Conectado; autenticando..."));
-        socket->sendTextMessage(QStringLiteral("PASS oauth:%1\r\n").arg(m_twitchToken));
-        socket->sendTextMessage(QStringLiteral("NICK %1\r\n").arg(m_twitchUsername));
+        setStatus(QStringLiteral("Twitch"), QStringLiteral("Conectado; entrando al chat anónimamente..."));
+        const quint32 randomNick = QRandomGenerator::global()->bounded(100000000u, 999999999u);
+        const QString anonymousNick = QStringLiteral("justinfan%1").arg(randomNick);
+        socket->sendTextMessage(QStringLiteral("NICK %1\r\n").arg(anonymousNick));
         socket->sendTextMessage(QStringLiteral("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n"));
         socket->sendTextMessage(QStringLiteral("JOIN #%1\r\n").arg(m_twitchChannel));
         m_twitchHandshakeTimer.start(15000);
@@ -395,7 +397,7 @@ void ChatController::handleTwitchLine(const QString &line, QWebSocket *socket)
     if (line.contains(QStringLiteral("Login authentication failed"))) {
         m_twitchRejected = true;
         m_twitchHandshakeTimer.stop();
-        setStatus(QStringLiteral("Twitch"), QStringLiteral("Token rechazado; revisá el permiso chat:read."));
+        setStatus(QStringLiteral("Twitch"), QStringLiteral("Twitch rechazó la conexión anónima; el canal puede requerir autenticación o el acceso anónimo puede estar limitado."));
         socket->close();
         return;
     }
@@ -403,7 +405,7 @@ void ChatController::handleTwitchLine(const QString &line, QWebSocket *socket)
         m_twitchAuthenticated = true;
         m_twitchHandshakeTimer.stop();
         m_twitchRetryDelay = 3000;
-        setStatus(QStringLiteral("Twitch"), QStringLiteral("Autenticado y conectado."));
+        setStatus(QStringLiteral("Twitch"), QStringLiteral("Conectado anónimamente; leyendo el chat."));
         setConnectedState();
     }
     const int marker = line.indexOf(QStringLiteral(" PRIVMSG "));

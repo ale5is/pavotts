@@ -10,6 +10,9 @@
 #include <QMediaPlayer>
 #include <QAudioOutput>
 #include <QSet>
+#include <QJsonObject>
+#include <QStringList>
+#include <QNetworkRequest>
 class ChatController final : public QObject
 {
     Q_OBJECT
@@ -105,6 +108,7 @@ private:
     QString m_twitchBuffer, m_kickChatroomId, m_youtubeApiKey, m_youtubeClientVersion, m_youtubeContinuation;
     int m_youtubePollDelay = 5000;
     bool m_stopping = false, m_connected = false, m_speaking = false;
+    quint64 m_connectionGeneration = 0;
     QQueue<QString> m_speechQueue;
     static constexpr int MaxSpeechQueue = 256;
     quint64 m_speechGeneration = 0;

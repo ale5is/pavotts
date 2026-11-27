@@ -968,7 +968,7 @@ void ChatController::connectKick()
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
             {QStringLiteral("client"), QJsonObject{{QStringLiteral("id"), clientId}, {QStringLiteral("type"), QStringLiteral("web")}}},
-            {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}}}}}
+            {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}}}}}
         };
         QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/connection"))};
         post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));

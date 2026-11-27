@@ -74,6 +74,66 @@ QJsonObject extractEmbeddedObject(const QString &html, const QStringList &marker
     return {};
 }
 
+QJsonObject extractMergedEmbeddedObjects(const QString &html, const QStringList &markers)
+{
+    QJsonObject merged;
+    for (const QString &marker : markers) {
+        int searchFrom = 0;
+        while (true) {
+            const int markerAt = html.indexOf(marker, searchFrom);
+            if (markerAt < 0)
+                break;
+
+            int start = markerAt + marker.size();
+            while (start < html.size() && html.at(start).isSpace())
+                ++start;
+            if (start >= html.size() || html.at(start) != QLatin1Char('{')) {
+                searchFrom = markerAt + marker.size();
+                continue;
+            }
+
+            int depth = 0;
+            bool inString = false;
+            bool escaped = false;
+            bool parsed = false;
+            for (int i = start; i < html.size(); ++i) {
+                const QChar ch = html.at(i);
+                if (inString) {
+                    if (escaped)
+                        escaped = false;
+                    else if (ch == QLatin1Char('\\'))
+                        escaped = true;
+                    else if (ch == QLatin1Char('"'))
+                        inString = false;
+                    continue;
+                }
+                if (ch == QLatin1Char('"')) {
+                    inString = true;
+                } else if (ch == QLatin1Char('{')) {
+                    ++depth;
+                } else if (ch == QLatin1Char('}')) {
+                    --depth;
+                    if (depth == 0) {
+                        const QJsonDocument document =
+                            QJsonDocument::fromJson(html.mid(start, i - start + 1).toUtf8());
+                        if (document.isObject()) {
+                            const QJsonObject part = document.object();
+                            for (auto it = part.begin(); it != part.end(); ++it)
+                                merged.insert(it.key(), it.value());
+                        }
+                        searchFrom = i + 1;
+                        parsed = true;
+                        break;
+                    }
+                }
+            }
+            if (!parsed)
+                break;
+        }
+    }
+    return merged;
+}
+
 QJsonObject findLiveChatRenderer(const QJsonValue &value)
 {
     if (value.isObject()) {
@@ -447,7 +507,7 @@ ChatController::ChatController(QObject *parent)
     : QObject(parent), m_player(this), m_audioOutput(this)
 {
     m_player.setAudioOutput(&m_audioOutput);
-    m_network.setTransferTimeout(20000);
+    m_network.setTransferTimeout(60000);
     m_audioOutput.setVolume(m_volume);
     connect(&m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus state) {
         if (state == QMediaPlayer::EndOfMedia || state == QMediaPlayer::InvalidMedia)
@@ -808,9 +868,9 @@ void ChatController::connectKick()
     // Centrifugo channel negotiation needs both IDs. Resolve the channel
     // resource first; keep LiteKickChat's direct chatroom route as fallback.
     const QString lookupPath = m_kickLookupAttempt == 0
-        ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
+        ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
         : (m_kickLookupAttempt == 1
-            ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
+            ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
             : QStringLiteral("/api/v1/channels/%1").arg(encodedChannel));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com") + lookupPath)};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0"));
@@ -843,23 +903,14 @@ void ChatController::connectKick()
             return;
         }
         const QJsonObject lookup = doc.object();
-        const bool directChatroomResponse = m_kickLookupAttempt == 1;
-        const QJsonValue chatableId = lookup.value(QStringLiteral("chatroom")).toObject()
-                                          .value(QStringLiteral("chatable_id"));
-        const QString channelText = directChatroomResponse
-            ? lookup.value(QStringLiteral("chatable_id")).toVariant().toString()
-            : (chatableId.isUndefined() || chatableId.isNull()
-                   ? lookup.value(QStringLiteral("id")).toVariant().toString()
-                   : chatableId.toVariant().toString());
+        const bool directChatroomResponse = m_kickLookupAttempt == 0;
         const QString roomText = directChatroomResponse
             ? lookup.value(QStringLiteral("id")).toVariant().toString()
             : lookup.value(QStringLiteral("chatroom")).toObject()
                   .value(QStringLiteral("id")).toVariant().toString();
         bool roomOk = false;
         const qlonglong room = roomText.toLongLong(&roomOk);
-        bool channelOk = false;
-        const qlonglong channelId = channelText.toLongLong(&channelOk);
-        if (!roomOk || room <= 0 || !channelOk || channelId <= 0) {
+        if (!roomOk || room <= 0) {
             if (m_kickLookupAttempt < 2) {
                 ++m_kickLookupAttempt;
                 connectKick();
@@ -870,17 +921,14 @@ void ChatController::connectKick()
             return;
         }
         m_kickLookupAttempt = 0;
-        m_kickChannelId = channelText;
+        m_kickChannelId.clear();
         m_kickChatroomId = QString::number(room);
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
             {QStringLiteral("client"), QJsonObject{{QStringLiteral("id"), clientId}, {QStringLiteral("type"), QStringLiteral("web")}}},
             {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}}}}}
         };
-        const QString realtimePath = m_kickChannelId.isEmpty()
-            ? QStringLiteral("/api/v1/realtime/connection")
-            : QStringLiteral("/api/v1/realtime/channels/%1/chat/connection").arg(m_kickChannelId);
-        QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com") + realtimePath)};
+        QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/connection"))};
         post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         post.setRawHeader("Origin", "https://kick.com");
         post.setRawHeader("Referer", "https://kick.com/");
@@ -976,11 +1024,22 @@ void ChatController::connectKick()
                     setStatus(QStringLiteral("Kick"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
                 });
                 connect(socket, &QWebSocket::errorOccurred, this, [this, socket, generation](QAbstractSocket::SocketError) {
-                    if (m_kickSocket == socket && !m_stopping && generation == m_connectionGeneration)
-                        setStatus(QStringLiteral("Kick"), socket->errorString());
+                    if (m_kickSocket != socket || m_stopping || generation != m_connectionGeneration)
+                        return;
+                    const QString error = socket->errorString();
+                    setStatus(QStringLiteral("Kick"), QStringLiteral("Error WebSocket: ") + error);
+                    m_kickSocket = nullptr;
+                    m_kickSubscribed = false;
+                    m_kickHandshakeTimer.stop();
+                    m_kickLeaseTimer.stop();
+                    setConnectedState();
+                    socket->abort();
+                    socket->deleteLater();
+                    scheduleKickRetry(QStringLiteral("Falló el WebSocket: ") + error);
                 });
                 QNetworkRequest wsRequest{QUrl(wsUrl)};
                 wsRequest.setRawHeader("Origin", "https://kick.com");
+                wsRequest.setRawHeader("User-Agent", "Mozilla/5.0");
                 socket->open(wsRequest);
             });
         });
@@ -1117,9 +1176,10 @@ void ChatController::connectYouTube()
             QStringLiteral("window[\"ytInitialData\"] = "),
             QStringLiteral("window.ytInitialData = ")
         });
-        const QJsonObject ytcfg = extractEmbeddedObject(html, {
+        const QJsonObject ytcfg = extractMergedEmbeddedObjects(html, {
             QStringLiteral("ytcfg.set("),
-            QStringLiteral("ytcfg.set (")
+            QStringLiteral("ytcfg.set ("),
+            QStringLiteral("ytcfg.data_ = ")
         });
 
         m_youtubeApiKey = ytcfg.value(QStringLiteral("INNERTUBE_API_KEY")).toString();
@@ -1249,8 +1309,7 @@ void ChatController::pollYouTube()
 
     QJsonObject requestBody{
         {QStringLiteral("context"), m_youtubeContext},
-        {QStringLiteral("continuation"), m_youtubeContinuation},
-        {QStringLiteral("webClientInfo"), QJsonObject{{QStringLiteral("isDocumentHidden"), false}}}
+        {QStringLiteral("continuation"), m_youtubeContinuation}
     };
     QNetworkRequest request{endpoint};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));

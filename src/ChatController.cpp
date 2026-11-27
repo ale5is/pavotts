@@ -455,7 +455,7 @@ QString normalizeKickChannel(QString channel)
     if (channel.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) ||
         channel.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
         const QStringList parts = QUrl(channel).path().split(QLatin1Char('/'), Qt::SkipEmptyParts);
-        channel = parts.isEmpty() ? QString() : parts.last();
+        channel = parts.isEmpty() ? QString() : parts.first();
     }
     if (channel.startsWith(QLatin1Char('@')))
         channel.remove(0, 1);
@@ -930,13 +930,15 @@ void ChatController::connectKick()
     m_kickLeaseTimer.stop();
     m_kickHeartbeatTimer.stop();
     m_kickSubscribed = false;
+    m_kickChannelId.clear();
+    m_kickChatroomId.clear();
     const quint64 generation = m_connectionGeneration;
     setStatus(QStringLiteral("Kick"), QStringLiteral("Resolviendo el canal..."));
     const QString kickSlug = normalizeKickChannel(m_kickChannel);
     if (kickSlug.isEmpty()) { scheduleKickRetry(QStringLiteral("Ingresá un nombre de canal Kick válido.")); return; }
     const QString encodedChannel = QString::fromLatin1(QUrl::toPercentEncoding(kickSlug));
-    // Resolve the chatroom using LiteKickChat's endpoint order. The generic
-    // Centrifugo negotiation does not require the broadcaster channel ID.
+    // Resolve both IDs from Kick's canonical channel response first; retain
+    // LiteKickChat's direct chatroom and v1 endpoints as fallback.
     const QString lookupPath = m_kickLookupAttempt == 0
         ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
         : (m_kickLookupAttempt == 1
@@ -981,7 +983,7 @@ void ChatController::connectKick()
         QString channelText = directChatroomResponse
             ? lookup.value(QStringLiteral("chatable_id")).toVariant().toString()
             : chatroom.value(QStringLiteral("chatable_id")).toVariant().toString();
-        if (channelText.isEmpty())
+        if (channelText.isEmpty() && !directChatroomResponse)
             channelText = lookup.value(QStringLiteral("id")).toVariant().toString();
         bool roomOk = false;
         const qlonglong room = roomText.toLongLong(&roomOk);
@@ -998,6 +1000,7 @@ void ChatController::connectKick()
         m_kickLookupAttempt = 0;
         m_kickChannelId = channelText;
         m_kickChatroomId = QString::number(room);
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Chatroom %1 resuelto; negociando conexión realtime...").arg(m_kickChatroomId));
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
             {QStringLiteral("client"), QJsonObject{{QStringLiteral("id"), clientId}, {QStringLiteral("type"), QStringLiteral("web")}}},
@@ -1056,6 +1059,7 @@ void ChatController::connectKick()
                                            responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
                 return;
             }
+            setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo seleccionado; solicitando token de invitado..."));
             QNetworkRequest auth{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/auth/connection"))};
             auth.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
             auth.setRawHeader("Origin", "https://kick.com");
@@ -1077,6 +1081,7 @@ void ChatController::connectKick()
                                           .arg(code).arg(responseDetail.isEmpty() ? QStringLiteral("sin cuerpo") : responseDetail));
                     return;
                 }
+                setStatus(QStringLiteral("Kick"), QStringLiteral("Token recibido; abriendo WebSocket de Centrifugo..."));
                 auto *socket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
                 m_kickSocket = socket;
                 socket->setProperty("kickToken", token);

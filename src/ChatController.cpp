@@ -1,6 +1,7 @@
 #include "ChatController.h"
 
 #include <QDir>
+#include <QCoreApplication>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -664,9 +665,22 @@ void ChatController::setVolume(double v) { m_volume = qBound(0.0, v, 1.0); m_aud
 
 void ChatController::loadSettings()
 {
+    QString configPath;
+#ifdef Q_OS_ANDROID
     const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     QDir().mkpath(directory);
-    QFile file(directory + QStringLiteral("/datos.config"));
+    configPath = directory + QStringLiteral("/.config");
+#else
+    const QString directory = QCoreApplication::applicationDirPath();
+    configPath = directory + QStringLiteral("/.config");
+    if (!QFile::exists(configPath)) {
+        const QString legacyDirectory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+        const QString legacyPath = legacyDirectory + QStringLiteral("/datos.config");
+        if (QFile::exists(legacyPath))
+            configPath = legacyPath;
+    }
+#endif
+    QFile file(configPath);
     if (!file.open(QIODevice::ReadOnly))
         return;
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
@@ -700,9 +714,15 @@ void ChatController::saveSettings()
     o.insert("prefijo", m_commandPrefix);
     o.insert("volumen", m_volume);
     o.insert("blacklist", blacklistText().replace('\n', ','));
+    QString configPath;
+#ifdef Q_OS_ANDROID
     const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     QDir().mkpath(directory);
-    QFile file(directory + QStringLiteral("/datos.config"));
+    configPath = directory + QStringLiteral("/.config");
+#else
+    configPath = QCoreApplication::applicationDirPath() + QStringLiteral("/.config");
+#endif
+    QFile file(configPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         setStatus(QStringLiteral("Configuración"), QStringLiteral("No se pudo guardar: ") + file.errorString());
         return;

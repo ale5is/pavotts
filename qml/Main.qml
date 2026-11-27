@@ -1,11 +1,12 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 
 ApplicationWindow {
     id: window
-    width: 1180
-    height: 820
+    width: 1280
+    height: 720
     minimumWidth: 360
     minimumHeight: 620
     visible: true
@@ -109,6 +110,16 @@ ApplicationWindow {
                 onClicked: settingsPage = false
             }
             Item { Layout.fillWidth: true }
+            RowLayout {
+                visible: !compact
+                spacing: 3
+                Button { text: "720p"; onClicked: { window.showNormal(); window.width = 1280; window.height = 720 } }
+                Button { text: "900p"; onClicked: { window.showNormal(); window.width = 1600; window.height = 900 } }
+                Button { text: "1080p"; onClicked: { window.showNormal(); window.width = 1920; window.height = 1080 } }
+                Button { text: "−"; onClicked: window.showMinimized() }
+                Button { text: "□"; onClicked: window.visibility === Window.Maximized ? window.showNormal() : window.showMaximized() }
+                Button { text: "⛶"; onClicked: window.visibility === Window.FullScreen ? window.showNormal() : window.showFullScreen() }
+            }
             ActionButton {
                 text: chat.connected ? "Desconectar" : "Conectar"
                 onClicked: chat.connected ? chat.disconnectAll() : chat.connectAll()

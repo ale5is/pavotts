@@ -540,7 +540,7 @@ ChatController::ChatController(QObject *parent)
     : QObject(parent), m_player(this), m_audioOutput(this)
 {
     m_player.setAudioOutput(&m_audioOutput);
-    m_network.setTransferTimeout(60000);
+    m_network.setTransferTimeout(120000);
     m_audioOutput.setVolume(m_volume);
     connect(&m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus state) {
         if (state == QMediaPlayer::EndOfMedia || state == QMediaPlayer::InvalidMedia)

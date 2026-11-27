@@ -25,6 +25,11 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build libgl1-mesa-dev
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --config Release --parallel
+      - name: Upload Linux executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: pavotts-linux-x64
+          path: build/PavoTTSNative
 
   windows-desktop:
     runs-on: windows-2022
@@ -41,6 +46,13 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --config Release --parallel
+      - name: Deploy Qt runtime
+        run: windeployqt --qmldir qml build/Release/PavoTTSNative.exe
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: pavotts-windows-x64
+          path: build/Release/
 
   android-arm64:
     runs-on: ubuntu-24.04

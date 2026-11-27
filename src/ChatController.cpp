@@ -770,13 +770,15 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         envelope = nested.object();
     }
     const QString eventName = envelope.value(QStringLiteral("event")).toString();
-    if (!eventName.contains(QStringLiteral("ChatMessage"), Qt::CaseInsensitive))
-        return;
     QJsonObject data = envelope.value(QStringLiteral("data")).toObject();
     if (data.isEmpty() && envelope.value(QStringLiteral("data")).isString()) {
         const QJsonDocument nested = QJsonDocument::fromJson(envelope.value(QStringLiteral("data")).toString().toUtf8());
         data = nested.object();
     }
+    const bool knownChatEvent = eventName.contains(QStringLiteral("ChatMessage"), Qt::CaseInsensitive);
+    const bool chatPayload = data.contains(QStringLiteral("content")) && data.value(QStringLiteral("sender")).isObject();
+    if (!knownChatEvent && !chatPayload)
+        return;
     const QJsonObject sender = data.value(QStringLiteral("sender")).toObject();
     const QString message = data.value(QStringLiteral("content")).toString().trimmed();
     QString name = sender.value(QStringLiteral("username")).toString();

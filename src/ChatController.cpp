@@ -568,9 +568,10 @@ void ChatController::connectKick()
             return;
         }
         const QJsonObject lookup = doc.object();
-        QString roomText = lookup.value(QStringLiteral("id")).toVariant().toString();
-        if (roomText.isEmpty())
-            roomText = lookup.value(QStringLiteral("chatroom")).toObject().value(QStringLiteral("id")).toVariant().toString();
+        QString roomText = lookup.value(QStringLiteral("chatroom")).toObject()
+                               .value(QStringLiteral("id")).toVariant().toString();
+        if (roomText.isEmpty() && m_kickLookupAttempt == 0)
+            roomText = lookup.value(QStringLiteral("id")).toVariant().toString();
         bool roomOk = false;
         const int room = roomText.toInt(&roomOk);
         if (!roomOk || room <= 0) {

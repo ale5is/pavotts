@@ -830,11 +830,13 @@ void ChatController::connectKick()
         }
         const QJsonObject lookup = doc.object();
         const bool directChatroomResponse = m_kickLookupAttempt == 1;
+        const QJsonValue chatableId = lookup.value(QStringLiteral("chatroom")).toObject()
+                                          .value(QStringLiteral("chatable_id"));
         const QString channelText = directChatroomResponse
             ? lookup.value(QStringLiteral("chatable_id")).toVariant().toString()
-            : lookup.value(QStringLiteral("chatroom")).toObject()
-                  .value(QStringLiteral("chatable_id")).toVariant().toString(
-                      lookup.value(QStringLiteral("id")).toVariant().toString());
+            : (chatableId.isUndefined() || chatableId.isNull()
+                   ? lookup.value(QStringLiteral("id")).toVariant().toString()
+                   : chatableId.toVariant().toString());
         const QString roomText = directChatroomResponse
             ? lookup.value(QStringLiteral("id")).toVariant().toString()
             : lookup.value(QStringLiteral("chatroom")).toObject()

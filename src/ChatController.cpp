@@ -972,9 +972,10 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
         }
 
         const QJsonObject root = document.object();
-        const QString continuation = findContinuationToken(root);
-        if (continuation.isEmpty()) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("/next respondió, pero no entregó una continuación utilizable para el chat del directo %1.").arg(videoId));
+        const QJsonObject liveChat = findLiveChatRenderer(root);
+        const QString continuation = findContinuationToken(liveChat.value(QStringLiteral("continuations")));
+        if (liveChat.isEmpty() || continuation.isEmpty()) {
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("/next respondió, pero no incluyó liveChatRenderer con una continuación para el directo %1.").arg(videoId));
             m_youtubeTimer.start(15000);
             return;
         }

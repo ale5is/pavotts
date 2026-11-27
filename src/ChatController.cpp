@@ -1114,7 +1114,25 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
     }
     const QJsonObject push = frame.value(QStringLiteral("push")).toObject();
     if (push.contains(QStringLiteral("ping"))) {
-        socket->sendTextMessage(QStringLiteral("{\"pong\":{}}"));
+        socket->sendTextMessage(QStringLiteral("{}"));
+        return;
+    }
+    if (push.contains(QStringLiteral("disconnect"))) {
+        const QJsonObject disconnect = push.value(QStringLiteral("disconnect")).toObject();
+        const QString code = disconnect.value(QStringLiteral("code")).toVariant().toString();
+        const QString message = disconnect.value(QStringLiteral("message")).toString();
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo cerró la conexión (%1): %2")
+                      .arg(code.isEmpty() ? QStringLiteral("sin código") : code,
+                           message.isEmpty() ? QStringLiteral("sin descripción") : message.left(200)));
+        socket->close();
+        return;
+    }
+    if (push.contains(QStringLiteral("unsubscribe"))) {
+        const QJsonObject unsubscribe = push.value(QStringLiteral("unsubscribe")).toObject();
+        const QString message = unsubscribe.value(QStringLiteral("message")).toString();
+        setStatus(QStringLiteral("Kick"), QStringLiteral("Centrifugo canceló la suscripción: %1")
+                      .arg(message.isEmpty() ? QStringLiteral("sin descripción") : message.left(200)));
+        socket->close();
         return;
     }
     const QJsonObject publication = push.value(QStringLiteral("pub")).toObject();

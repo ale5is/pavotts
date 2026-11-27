@@ -31,6 +31,107 @@ QString cleanUserName(QString name)
     return name.isEmpty() ? QStringLiteral("User") : name;
 }
 
+QJsonObject extractEmbeddedObject(const QString &html, const QStringList &markers)
+{
+    for (const QString &marker : markers) {
+        const int markerAt = html.indexOf(marker);
+        if (markerAt < 0)
+            continue;
+        const int start = html.indexOf(QLatin1Char('{'), markerAt + marker.size());
+        if (start < 0)
+            continue;
+        int depth = 0;
+        bool inString = false;
+        bool escaped = false;
+        for (int i = start; i < html.size(); ++i) {
+            const QChar ch = html.at(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (ch == QLatin1Char('\\')) {
+                    escaped = true;
+                } else if (ch == QLatin1Char('"')) {
+                    inString = false;
+                }
+                continue;
+            }
+            if (ch == QLatin1Char('"')) {
+                inString = true;
+            } else if (ch == QLatin1Char('{')) {
+                ++depth;
+            } else if (ch == QLatin1Char('}')) {
+                --depth;
+                if (depth == 0) {
+                    const QJsonDocument document = QJsonDocument::fromJson(html.mid(start, i - start + 1).toUtf8());
+                    if (document.isObject())
+                        return document.object();
+                    break;
+                }
+            }
+        }
+    }
+    return {};
+}
+
+QJsonObject findLiveChatRenderer(const QJsonValue &value)
+{
+    if (value.isObject()) {
+        const QJsonObject object = value.toObject();
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            if (it.key() == QStringLiteral("liveChatRenderer") && it.value().isObject()) {
+                const QJsonObject renderer = it.value().toObject();
+                if (renderer.contains(QStringLiteral("continuations")))
+                    return renderer;
+            }
+            const QJsonObject nested = findLiveChatRenderer(it.value());
+            if (!nested.isEmpty())
+                return nested;
+        }
+    } else if (value.isArray()) {
+        for (const QJsonValue &child : value.toArray()) {
+            const QJsonObject nested = findLiveChatRenderer(child);
+            if (!nested.isEmpty())
+                return nested;
+        }
+    }
+    return {};
+}
+
+QString findContinuationToken(const QJsonValue &value)
+{
+    if (value.isObject()) {
+        const QJsonObject object = value.toObject();
+        const QString direct = object.value(QStringLiteral("continuation")).toString();
+        if (!direct.isEmpty())
+            return direct;
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            const QString nested = findContinuationToken(it.value());
+            if (!nested.isEmpty())
+                return nested;
+        }
+    } else if (value.isArray()) {
+        for (const QJsonValue &child : value.toArray()) {
+            const QString nested = findContinuationToken(child);
+            if (!nested.isEmpty())
+                return nested;
+        }
+    }
+    return {};
+}
+
+QString normalizeKickChannel(QString channel)
+{
+    channel = channel.trimmed();
+    if (channel.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) ||
+        channel.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+        const QStringList parts = QUrl(channel).path().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        channel = parts.isEmpty() ? QString() : parts.last();
+    }
+    if (channel.startsWith(QLatin1Char('@')))
+        channel.remove(0, 1);
+    return channel.trimmed();
+}
+
 QString correctPronunciation(QString text)
 {
     text.replace('@', QStringLiteral(" arroba "));
@@ -255,7 +356,7 @@ void ChatController::connectAll()
 {
     disconnectAll();
     m_stopping = false;
-    m_twitchRejected = false; m_twitchRetryDelay = 3000; m_kickRetryDelay = 3000;
+    m_twitchRejected = false; m_twitchRetryDelay = 3000; m_kickRetryDelay = 3000; m_kickLookupAttempt = 0;
     m_messages.clear();
     emit messagesChanged();
     saveSettings();
@@ -436,7 +537,9 @@ void ChatController::connectKick()
     m_kickSubscribed = false;
     const quint64 generation = m_connectionGeneration;
     setStatus(QStringLiteral("Kick"), QStringLiteral("Resolviendo el canal..."));
-    const QString encodedChannel = QString::fromLatin1(QUrl::toPercentEncoding(m_kickChannel));
+    const QString kickSlug = normalizeKickChannel(m_kickChannel);
+    if (kickSlug.isEmpty()) { scheduleKickRetry(QStringLiteral("Ingresá un nombre de canal Kick válido.")); return; }
+    const QString encodedChannel = QString::fromLatin1(QUrl::toPercentEncoding(kickSlug));
     const QString lookupPath = m_kickLookupAttempt == 0
         ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
         : (m_kickLookupAttempt == 1
@@ -484,11 +587,14 @@ void ChatController::connectKick()
         const QString clientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
         const QJsonObject body{
             {QStringLiteral("client"), QJsonObject{{QStringLiteral("id"), clientId}, {QStringLiteral("type"), QStringLiteral("web")}}},
-            {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}}}}}
+            {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("accepted_providers"), QJsonArray{QJsonObject{{QStringLiteral("provider"), QStringLiteral("pusher")}}, QJsonObject{{QStringLiteral("provider"), QStringLiteral("centrifugo")}}}}}}
         };
         QNetworkRequest post{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/channels/%1/chat/connection").arg(m_kickChatroomId))};
         post.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
         post.setRawHeader("Origin", "https://kick.com");
+        post.setRawHeader("Referer", "https://kick.com/");
+        post.setRawHeader("Accept", "application/json");
+        post.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
         auto *connection = m_network.post(post, QJsonDocument(body).toJson(QJsonDocument::Compact));
         connect(connection, &QNetworkReply::finished, this, [this, connection, clientId, generation]() {
             if (m_stopping || generation != m_connectionGeneration) { connection->deleteLater(); return; }
@@ -511,6 +617,9 @@ void ChatController::connectKick()
             QNetworkRequest auth{QUrl(QStringLiteral("https://web.kick.com/api/v1/realtime/auth/connection"))};
             auth.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
             auth.setRawHeader("Origin", "https://kick.com");
+            auth.setRawHeader("Referer", "https://kick.com/");
+            auth.setRawHeader("Accept", "application/json");
+            auth.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
             const QByteArray authBody = QJsonDocument(QJsonObject{{QStringLiteral("client_id"), clientId}}).toJson(QJsonDocument::Compact);
             auto *tokenReply = m_network.post(auth, authBody);
             connect(tokenReply, &QNetworkReply::finished, this, [this, tokenReply, wsUrl, generation]() {
@@ -620,35 +729,81 @@ void ChatController::connectYouTube()
     stopYouTube();
     m_youtubeSeenIds.clear();
     m_youtubeSeenOrder.clear();
+
     QString channel = m_youtubeChannel.trimmed();
-    if (!channel.startsWith('@') && !channel.startsWith(QStringLiteral("UC")))
-        channel.prepend('@');
+    if (channel.startsWith(QStringLiteral("http://"), Qt::CaseInsensitive) ||
+        channel.startsWith(QStringLiteral("https://"), Qt::CaseInsensitive)) {
+        const QStringList parts = QUrl(channel).path().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        channel.clear();
+        for (const QString &part : parts) {
+            if (part.startsWith(QLatin1Char('@')) || part.startsWith(QStringLiteral("UC"))) {
+                channel = part;
+                break;
+            }
+        }
+    }
+    if (channel.isEmpty()) {
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("Ingresá un canal, @handle o URL de YouTube válida."));
+        return;
+    }
+    if (channel.startsWith(QStringLiteral("UC")))
+        channel.prepend(QStringLiteral("channel/"));
+    else if (!channel.startsWith(QLatin1Char('@')))
+        channel.prepend(QLatin1Char('@'));
+
     const QUrl pageUrl(QStringLiteral("https://www.youtube.com/") + channel + QStringLiteral("/live"));
-    setStatus(QStringLiteral("YouTube"), QStringLiteral("Buscando transmisión en vivo..."));
+    setStatus(QStringLiteral("YouTube"), QStringLiteral("Buscando transmisión y chat en vivo..."));
     QNetworkRequest pageRequest(pageUrl);
-    pageRequest.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"));
+    pageRequest.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
+    pageRequest.setRawHeader("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
+    pageRequest.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     auto *reply = m_network.get(pageRequest);
     m_youtubeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
-        const QString html = QString::fromUtf8(reply->readAll());
+        const QByteArray response = reply->readAll();
+        const QString error = reply->errorString();
         const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QUrl finalUrl = reply->url();
         reply->deleteLater();
         m_youtubeReply = nullptr;
-        if (code < 200 || code >= 400) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo abrir el canal (HTTP %1); reintentando en 30 segundos.").arg(code));
+
+        if (code < 200 || code >= 400 || response.isEmpty()) {
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo abrir el canal (HTTP %1): %2").arg(code).arg(error));
             m_youtubeTimer.start(30000);
             return;
         }
-        m_youtubeApiKey = QRegularExpression(QStringLiteral("\"INNERTUBE_API_KEY\"\\s*:\\s*\"([^\"]+)\"")).match(html).captured(1);
-        m_youtubeClientVersion = QRegularExpression(QStringLiteral("\"clientVersion\"\\s*:\\s*\"([^\"]+)\"")).match(html).captured(1);
-        m_youtubeContinuation = QRegularExpression(QStringLiteral("\"continuation\"\\s*:\\s*\"([^\"\\\\]+)")).match(html).captured(1);
-        if (m_youtubeApiKey.isEmpty() || m_youtubeContinuation.isEmpty()) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("No se encontró un chat en vivo activo; reintentando en 30 segundos."));
+
+        const QString html = QString::fromUtf8(response);
+        const QJsonObject initialData = extractEmbeddedObject(html, {
+            QStringLiteral("var ytInitialData = "),
+            QStringLiteral("ytInitialData = "),
+            QStringLiteral("window[\"ytInitialData\"] = "),
+            QStringLiteral("window.ytInitialData = ")
+        });
+        const QJsonObject ytcfg = extractEmbeddedObject(html, {
+            QStringLiteral("ytcfg.set("),
+            QStringLiteral("ytcfg.set (")
+        });
+
+        m_youtubeApiKey = ytcfg.value(QStringLiteral("INNERTUBE_API_KEY")).toString();
+        m_youtubeContext = ytcfg.value(QStringLiteral("INNERTUBE_CONTEXT")).toObject();
+        m_youtubeClientVersion = ytcfg.value(QStringLiteral("INNERTUBE_CONTEXT_CLIENT_VERSION")).toString();
+        if (m_youtubeClientVersion.isEmpty())
+            m_youtubeClientVersion = m_youtubeContext.value(QStringLiteral("client")).toObject()
+                                        .value(QStringLiteral("clientVersion")).toString();
+
+        const QJsonObject renderer = findLiveChatRenderer(initialData);
+        m_youtubeContinuation = findContinuationToken(renderer.value(QStringLiteral("continuations")));
+        if (m_youtubeApiKey.isEmpty() || m_youtubeContinuation.isEmpty() || m_youtubeContext.isEmpty()) {
+            setStatus(QStringLiteral("YouTube"),
+                      QStringLiteral("No se encontró el chat en la página %1. Verificá que el canal esté transmitiendo en vivo y que el chat esté habilitado.")
+                          .arg(finalUrl.toString()));
             m_youtubeTimer.start(30000);
             return;
         }
-        setStatus(QStringLiteral("YouTube"), QStringLiteral("Transmisión detectada; leyendo chat..."));
+
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("Chat en vivo detectado; conectando a InnerTube..."));
         setConnectedState();
         m_youtubePollDelay = 1000;
         pollYouTube();
@@ -662,31 +817,64 @@ void ChatController::pollYouTube()
         if (!m_youtubeChannel.isEmpty()) connectYouTube();
         return;
     }
-    const QString endpoint = QStringLiteral("https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=")
-                             + QString::fromLatin1(QUrl::toPercentEncoding(m_youtubeApiKey));
-    const QString body = QStringLiteral("{\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"%1\",\"hl\":\"es\",\"gl\":\"AR\"}},\"continuation\":\"%2\"}")
-                             .arg(jsonEscaped(m_youtubeClientVersion), jsonEscaped(m_youtubeContinuation));
-    QNetworkRequest request{QUrl(endpoint)};
+
+    QUrl endpoint(QStringLiteral("https://www.youtube.com/youtubei/v1/live_chat/get_live_chat"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("key"), m_youtubeApiKey);
+    query.addQueryItem(QStringLiteral("prettyPrint"), QStringLiteral("false"));
+    endpoint.setQuery(query);
+
+    QJsonObject requestBody{
+        {QStringLiteral("context"), m_youtubeContext},
+        {QStringLiteral("continuation"), m_youtubeContinuation},
+        {QStringLiteral("webClientInfo"), QJsonObject{{QStringLiteral("isDocumentHidden"), false}}}
+    };
+    QNetworkRequest request{endpoint};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"));
-    auto *reply = m_network.post(request, body.toUtf8());
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
+    request.setRawHeader("Origin", "https://www.youtube.com");
+    request.setRawHeader("Referer", "https://www.youtube.com/");
+    request.setRawHeader("X-YouTube-Client-Name", "1");
+    request.setRawHeader("X-YouTube-Client-Version", m_youtubeClientVersion.toUtf8());
+
+    auto *reply = m_network.post(request, QJsonDocument(requestBody).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
         const QByteArray bytes = reply->readAll();
         const QString error = reply->errorString();
-        const bool failed = reply->error() != QNetworkReply::NoError;
+        const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool failed = reply->error() != QNetworkReply::NoError || code < 200 || code >= 300;
         reply->deleteLater();
         m_youtubeReply = nullptr;
+
         if (failed) {
-            setStatus(QStringLiteral("YouTube"), QStringLiteral("Error consultando el chat: ") + error);
-            m_youtubeTimer.start(5000);
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("InnerTube rechazó la consulta (HTTP %1): %2").arg(code).arg(error));
+            m_youtubeTimer.start(10000);
             return;
         }
+
         const QJsonDocument document = QJsonDocument::fromJson(bytes);
-        if (document.isObject())
-            parseYouTubeResponse(document.object());
-        m_youtubeTimer.start(qMax(1000, m_youtubePollDelay));
+        if (!document.isObject()) {
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("YouTube devolvió una respuesta que no es JSON válido."));
+            m_youtubeTimer.start(10000);
+            return;
+        }
+        const QJsonObject root = document.object();
+        if (root.contains(QStringLiteral("error"))) {
+            const QJsonObject apiError = root.value(QStringLiteral("error")).toObject();
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("Error InnerTube: %1").arg(apiError.value(QStringLiteral("message")).toString(QStringLiteral("respuesta de error"))));
+            m_youtubeTimer.start(15000);
+            return;
+        }
+        parseYouTubeResponse(root);
+        if (m_youtubeContinuation.isEmpty()) {
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("El chat dejó de ofrecer continuaciones; comprobando nuevamente la transmisión."));
+            m_youtubeTimer.start(15000);
+        } else {
+            setStatus(QStringLiteral("YouTube"), QStringLiteral("Chat conectado; consultando mensajes."));
+            m_youtubeTimer.start(qMax(1000, m_youtubePollDelay));
+        }
     });
 }
 

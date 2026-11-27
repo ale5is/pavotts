@@ -404,12 +404,12 @@ QString findYouTubeChannelId(const QJsonValue &value)
     return {};
 }
 
-QString findLiveVideoId(const QJsonValue &value)
+QString findLiveVideoId(const QJsonValue &value, const QSet<QString> &excluded = QSet<QString>())
 {
     if (value.isObject()) {
         const QJsonObject object = value.toObject();
         const QString rendererId = object.value(QStringLiteral("videoId")).toString();
-        if (rendererId.size() == 11) {
+        if (rendererId.size() == 11 && !excluded.contains(rendererId)) {
             for (const QJsonValue &overlay : object.value(QStringLiteral("thumbnailOverlays")).toArray()) {
                 if (overlay.toObject().value(QStringLiteral("thumbnailOverlayTimeStatusRenderer")).toObject()
                         .value(QStringLiteral("style")).toString() == QStringLiteral("LIVE"))
@@ -418,7 +418,7 @@ QString findLiveVideoId(const QJsonValue &value)
         }
 
         const QString lockupId = object.value(QStringLiteral("contentId")).toString();
-        if (lockupId.size() == 11
+        if (lockupId.size() == 11 && !excluded.contains(lockupId)
             && object.value(QStringLiteral("contentType")).toString() == QStringLiteral("LOCKUP_CONTENT_TYPE_VIDEO")) {
             const QJsonArray overlays = object.value(QStringLiteral("contentImage")).toObject()
                 .value(QStringLiteral("thumbnailViewModel")).toObject().value(QStringLiteral("overlays")).toArray();
@@ -435,13 +435,13 @@ QString findLiveVideoId(const QJsonValue &value)
         }
 
         for (auto it = object.begin(); it != object.end(); ++it) {
-            const QString nested = findLiveVideoId(it.value());
+            const QString nested = findLiveVideoId(it.value(), excluded);
             if (!nested.isEmpty())
                 return nested;
         }
     } else if (value.isArray()) {
         for (const QJsonValue &child : value.toArray()) {
-            const QString nested = findLiveVideoId(child);
+            const QString nested = findLiveVideoId(child, excluded);
             if (!nested.isEmpty())
                 return nested;
         }
@@ -487,6 +487,33 @@ QString jsonEscaped(const QString &value)
     array.append(value);
     const QByteArray json = QJsonDocument(array).toJson(QJsonDocument::Compact);
     return QString::fromUtf8(json.mid(1, json.size() - 2));
+}
+
+QString findYouTubeVideoOwnerChannelId(const QJsonValue &value)
+{
+    if (value.isObject()) {
+        const QJsonObject object = value.toObject();
+        const QJsonObject owner = object.value(QStringLiteral("videoOwnerRenderer")).toObject();
+        if (!owner.isEmpty()) {
+            const QString channelId = owner.value(QStringLiteral("navigationEndpoint")).toObject()
+                                          .value(QStringLiteral("browseEndpoint")).toObject()
+                                          .value(QStringLiteral("browseId")).toString();
+            if (isYouTubeChannelId(channelId))
+                return channelId;
+        }
+        for (auto it = object.begin(); it != object.end(); ++it) {
+            const QString nested = findYouTubeVideoOwnerChannelId(it.value());
+            if (!nested.isEmpty())
+                return nested;
+        }
+    } else if (value.isArray()) {
+        for (const QJsonValue &child : value.toArray()) {
+            const QString nested = findYouTubeVideoOwnerChannelId(child);
+            if (!nested.isEmpty())
+                return nested;
+        }
+    }
+    return {};
 }
 
 void collectYouTubeMessages(const QJsonValue &value, QList<QVariantMap> &messages)

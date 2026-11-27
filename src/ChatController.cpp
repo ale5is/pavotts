@@ -593,10 +593,10 @@ void ChatController::connectKick()
     if (kickSlug.isEmpty()) { scheduleKickRetry(QStringLiteral("Ingresá un nombre de canal Kick válido.")); return; }
     const QString encodedChannel = QString::fromLatin1(QUrl::toPercentEncoding(kickSlug));
     const QString lookupPath = m_kickLookupAttempt == 0
-        ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
+        ? QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel)
         : (m_kickLookupAttempt == 1
-            ? QStringLiteral("/api/v1/channels/%1").arg(encodedChannel)
-            : QStringLiteral("/api/v2/channels/%1/chatroom").arg(encodedChannel));
+            ? QStringLiteral("/api/v2/channels/%1").arg(encodedChannel)
+            : QStringLiteral("/api/v1/channels/%1").arg(encodedChannel));
     QNetworkRequest request{QUrl(QStringLiteral("https://kick.com") + lookupPath)};
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36"));
     request.setRawHeader("Accept", "application/json");
@@ -626,11 +626,14 @@ void ChatController::connectKick()
             return;
         }
         const QJsonObject lookup = doc.object();
-        const QString channelText = m_kickLookupAttempt < 2 ? lookup.value(QStringLiteral("id")).toVariant().toString() : QString();
-        QString roomText = lookup.value(QStringLiteral("chatroom")).toObject()
-                               .value(QStringLiteral("id")).toVariant().toString();
-        if (roomText.isEmpty() && m_kickLookupAttempt == 2)
-            roomText = lookup.value(QStringLiteral("id")).toVariant().toString();
+        const bool directChatroomResponse = m_kickLookupAttempt == 0;
+        const QString channelText = directChatroomResponse
+            ? QString()
+            : lookup.value(QStringLiteral("id")).toVariant().toString();
+        QString roomText = directChatroomResponse
+            ? lookup.value(QStringLiteral("id")).toVariant().toString()
+            : lookup.value(QStringLiteral("chatroom")).toObject()
+                  .value(QStringLiteral("id")).toVariant().toString();
         bool roomOk = false;
         const int room = roomText.toInt(&roomOk);
         if (!roomOk || room <= 0) {

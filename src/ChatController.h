@@ -19,8 +19,6 @@ class ChatController final : public QObject
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(QVariantList messages READ messages NOTIFY messagesChanged)
     Q_PROPERTY(QString twitchChannel READ twitchChannel WRITE setTwitchChannel NOTIFY settingsChanged)
-    Q_PROPERTY(QString twitchUsername READ twitchUsername WRITE setTwitchUsername NOTIFY settingsChanged)
-    Q_PROPERTY(QString twitchToken READ twitchToken WRITE setTwitchToken NOTIFY settingsChanged)
     Q_PROPERTY(QString youtubeChannel READ youtubeChannel WRITE setYoutubeChannel NOTIFY settingsChanged)
     Q_PROPERTY(QString kickChannel READ kickChannel WRITE setKickChannel NOTIFY settingsChanged)
     Q_PROPERTY(QString sessionId READ sessionId WRITE setSessionId NOTIFY settingsChanged)
@@ -38,8 +36,6 @@ public:
     QString status() const;
     QVariantList messages() const;
     QString twitchChannel() const;
-    QString twitchUsername() const;
-    QString twitchToken() const;
     QString youtubeChannel() const;
     QString kickChannel() const;
     QString sessionId() const;
@@ -52,8 +48,6 @@ public:
     bool speaking() const;
     int queuedSpeech() const;
     void setTwitchChannel(const QString &v);
-    void setTwitchUsername(const QString &v);
-    void setTwitchToken(const QString &v);
     void setYoutubeChannel(const QString &v);
     void setKickChannel(const QString &v);
     void setSessionId(const QString &v);
@@ -98,7 +92,6 @@ private:
     void scheduleTwitchRetry(const QString &reason);
     QString m_status = QStringLiteral("Ingresá los datos y presioná CONECTAR.");
     QVariantList m_messages;
-    QString m_twitchChannel, m_twitchUsername, m_twitchToken;
     QString m_youtubeChannel, m_kickChannel, m_sessionId;
     QString m_voice = QStringLiteral("es_002"), m_character, m_commandPrefix;
     double m_volume = 1.0;

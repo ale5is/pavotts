@@ -1218,6 +1218,10 @@ void ChatController::connectYouTube()
     else if (!channel.startsWith(QLatin1Char('@')))
         channel.prepend(QLatin1Char('@'));
 
+    m_youtubeResolvedChannelId = channel.startsWith(QStringLiteral("channel/"))
+        ? channel.mid(QStringLiteral("channel/").size()) : QString();
+    m_youtubeResolvedHandle = channel.startsWith(QLatin1Char('@')) ? channel.mid(1) : QString();
+
     const QUrl pageUrl(QStringLiteral("https://www.youtube.com/") + channel + QStringLiteral("/live"));
     setStatus(QStringLiteral("YouTube"), QStringLiteral("Buscando transmisión y chat en vivo..."));
     QNetworkRequest pageRequest(pageUrl);
@@ -1268,6 +1272,9 @@ void ChatController::connectYouTube()
             m_youtubeClientVersion = m_youtubeContext.value(QStringLiteral("client")).toObject()
                                         .value(QStringLiteral("clientVersion")).toString();
 
+        const QString pageChannelId = findYouTubeChannelId(initialData);
+        if (isYouTubeChannelId(pageChannelId))
+            m_youtubeResolvedChannelId = pageChannelId;
         QString videoId = QUrlQuery(finalUrl).queryItemValue(QStringLiteral("v"));
         if (videoId.isEmpty())
             videoId = findLiveVideoId(initialData);
@@ -1307,7 +1314,7 @@ void ChatController::connectYouTube()
         }
 
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Directo detectado (%1); solicitando posición actual del chat...").arg(videoId));
-        requestYouTubeInitialContinuation(videoId);
+        requestYouTubeInitialContinuation(videoId, true);
     });
 }
 
@@ -1379,6 +1386,7 @@ void ChatController::requestYouTubeResolveChannel(const QString &handle)
             clientContext.insert(QStringLiteral("visitorData"), responseVisitor);
             m_youtubeContext.insert(QStringLiteral("client"), clientContext);
         }
+        m_youtubeResolvedChannelId = channelId;
         setStatus(QStringLiteral("YouTube"), QStringLiteral("Canal @%1 resuelto; buscando sus transmisiones...").arg(handle));
         requestYouTubeChannelStreams(channelId);
     });
@@ -1388,6 +1396,7 @@ void ChatController::requestYouTubeChannelStreams(const QString &channelId)
 {
     if (m_stopping || channelId.isEmpty())
         return;
+    m_youtubeResolvedChannelId = channelId;
 
     QUrl endpoint(QStringLiteral("https://www.youtube.com/youtubei/v1/browse"));
     QUrlQuery query;
@@ -1446,7 +1455,7 @@ void ChatController::requestYouTubeChannelStreams(const QString &channelId)
         const QString videoId = findLiveVideoId(root);
         if (!videoId.isEmpty()) {
             setStatus(QStringLiteral("YouTube"), QStringLiteral("Directo detectado desde la pestaña de transmisiones (%1); solicitando el chat...").arg(videoId));
-            requestYouTubeInitialContinuation(videoId);
+            requestYouTubeInitialContinuation(videoId, false);
             return;
         }
 
@@ -1466,7 +1475,7 @@ void ChatController::requestYouTubeChannelStreams(const QString &channelId)
     });
 }
 
-void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
+void ChatController::requestYouTubeInitialContinuation(const QString &videoId, bool allowChannelFallback)
 {
     if (m_stopping || videoId.isEmpty())
         return;
@@ -1495,7 +1504,7 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
 
     auto *reply = m_network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;
-    connect(reply, &QNetworkReply::finished, this, [this, reply, videoId]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, videoId, allowChannelFallback]() {
         if (m_stopping || m_youtubeReply != reply) {
             reply->deleteLater();
             return;
@@ -1509,6 +1518,14 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
         const QJsonDocument document = QJsonDocument::fromJson(bytes);
         if (code < 200 || code >= 300 || !document.isObject()) {
             const QString detail = QString::fromUtf8(bytes.left(400)).simplified();
+            if (allowChannelFallback && (!m_youtubeResolvedChannelId.isEmpty() || !m_youtubeResolvedHandle.isEmpty())) {
+                setStatus(QStringLiteral("YouTube"), QStringLiteral("/next no pudo abrir el chat; volviendo a descubrir las transmisiones del canal."));
+                if (!m_youtubeResolvedChannelId.isEmpty())
+                    requestYouTubeChannelStreams(m_youtubeResolvedChannelId);
+                else
+                    requestYouTubeResolveChannel(m_youtubeResolvedHandle);
+                return;
+            }
             setStatus(QStringLiteral("YouTube"), QStringLiteral("No se pudo obtener la continuación desde /next (HTTP %1): %2. Respuesta: %3")
                           .arg(code).arg(error).arg(detail.isEmpty() ? QStringLiteral("sin cuerpo") : detail));
             m_youtubeTimer.start(15000);
@@ -1527,6 +1544,14 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId)
         int initialDelay = 0;
         const QString continuation = findLiveChatContinuation(liveChat, &initialDelay);
         if (liveChat.isEmpty() || continuation.isEmpty()) {
+            if (allowChannelFallback && (!m_youtubeResolvedChannelId.isEmpty() || !m_youtubeResolvedHandle.isEmpty())) {
+                setStatus(QStringLiteral("YouTube"), QStringLiteral("El video no entregó chat activo; buscando otro directo del mismo canal."));
+                if (!m_youtubeResolvedChannelId.isEmpty())
+                    requestYouTubeChannelStreams(m_youtubeResolvedChannelId);
+                else
+                    requestYouTubeResolveChannel(m_youtubeResolvedHandle);
+                return;
+            }
             setStatus(QStringLiteral("YouTube"), QStringLiteral("/next respondió, pero no incluyó liveChatRenderer con una continuación para el directo %1.").arg(videoId));
             m_youtubeTimer.start(15000);
             return;

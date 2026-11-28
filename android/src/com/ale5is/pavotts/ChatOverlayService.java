@@ -47,6 +47,8 @@ public final class ChatOverlayService extends Service {
     private TextView ticker;
     private View bubble;
     private LinearLayout chatPanel;
+    private View panelTitleView;
+    private View panelCloseView;
     private TextView chatContent;
     private ScrollView chatScroll;
     private WindowManager.LayoutParams bubbleParams;
@@ -146,6 +148,8 @@ public final class ChatOverlayService extends Service {
             bubbleParams = null;
         }
         chatPanel = null;
+        panelTitleView = null;
+        panelCloseView = null;
         chatContent = null;
         chatScroll = null;
     }
@@ -214,6 +218,8 @@ public final class ChatOverlayService extends Service {
         close.setMinWidth(dp(42));
         close.setMinimumWidth(dp(42));
         close.setOnClickListener(v -> closePanel());
+        panelTitleView = title;
+        panelCloseView = close;
         header.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
         header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(40)));
         chatPanel.addView(header);
@@ -361,20 +367,20 @@ public final class ChatOverlayService extends Service {
 
     private void headerCloseOnRight() {
         LinearLayout header = (LinearLayout) chatPanel.getChildAt(0);
-        View title = header.getChildAt(0);
-        View close = header.getChildAt(1);
+        if (header.getChildAt(0) == panelTitleView)
+            return;
         header.removeAllViews();
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
-        header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        header.addView(panelTitleView, new LinearLayout.LayoutParams(0, dp(40), 1));
+        header.addView(panelCloseView, new LinearLayout.LayoutParams(dp(44), dp(40)));
     }
 
     private void headerCloseOnLeft() {
         LinearLayout header = (LinearLayout) chatPanel.getChildAt(0);
-        View title = header.getChildAt(0);
-        View close = header.getChildAt(1);
+        if (header.getChildAt(0) == panelCloseView)
+            return;
         header.removeAllViews();
-        header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(40)));
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
+        header.addView(panelCloseView, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        header.addView(panelTitleView, new LinearLayout.LayoutParams(0, dp(40), 1));
     }
 
     private void closePanel() {

@@ -226,7 +226,7 @@ ApplicationWindow {
                                     Label { text: Math.round(chat.volume * 100) + "%"; color: "white"; Layout.minimumWidth: 42 }
                                 }
                                 RowLayout {
-                                    ActionButton { text: "Probar voz"; onClicked: chat.testTts() }
+                                    ActionButton { text: "Probar voz"; enabled: chat.ttsEnabled; onClicked: chat.testTts() }
                                     Button { text: "Vaciar cola"; onClicked: chat.clearSpeechQueue() }
                                     Label { text: chat.queuedSpeech + " en cola"; color: "#91a4bd"; font.pixelSize: 11 }
                                 }
@@ -281,6 +281,10 @@ ApplicationWindow {
                             Label { text: "CHAT MULTIPLATAFORMA"; color: "white"; font.bold: true; font.pixelSize: 16 }
                             Item { Layout.fillWidth: true }
                             Label { text: chat.messages.length + " mensajes"; color: "#8195ae"; font.pixelSize: 11 }
+                            Button {
+                                text: chat.ttsEnabled ? "Desactivar TTS" : "Activar TTS"
+                                onClicked: chat.ttsEnabled = !chat.ttsEnabled
+                            }
                             Button { text: "Limpiar"; onClicked: chat.clearChat() }
                         }
                         ListView {
@@ -336,7 +340,7 @@ ApplicationWindow {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    Label { text: chat.speaking ? "🔊 Reproduciendo voz" : "◉ TTS en espera"; color: chat.speaking ? "#63e4b0" : "#90a2b8" }
+                    Label { text: !chat.ttsEnabled ? "◉ Solo chat · TTS desactivado" : (chat.speaking ? "🔊 Reproduciendo voz" : "◉ TTS activado · En espera"); color: chat.ttsEnabled ? (chat.speaking ? "#63e4b0" : "#90a2b8") : "#ffc078" }
                     Item { Layout.fillWidth: true }
                     Label { text: "Cola: " + chat.queuedSpeech; color: "#90a2b8" }
                 }

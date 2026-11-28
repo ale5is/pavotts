@@ -98,8 +98,17 @@ public final class ChatOverlayService extends Service {
         ticker.measure(
                 android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
                 android.view.View.MeasureSpec.makeMeasureSpec(dp(64), android.view.View.MeasureSpec.AT_MOST));
-        int textWidth = ticker.getMeasuredWidth();
+        int textWidth = Math.max(dp(80), ticker.getMeasuredWidth());
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        WindowManager.LayoutParams params = (WindowManager.LayoutParams) ticker.getLayoutParams();
+        params.width = textWidth;
+        try {
+            windowManager.updateViewLayout(ticker, params);
+        } catch (RuntimeException ignored) {
+            animating = false;
+            stopSelf();
+            return;
+        }
         ticker.setTranslationX(screenWidth);
         ticker.setVisibility(TextView.VISIBLE);
         animating = true;

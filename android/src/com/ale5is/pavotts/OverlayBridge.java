@@ -39,6 +39,17 @@ public final class OverlayBridge {
     public static void setTickerEnabled(Context context, boolean enabled) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .edit().putBoolean(TICKER_ENABLED, enabled).apply();
+        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && !Settings.canDrawOverlays(context)
+                && !context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                        .getBoolean(ENABLED, false)) {
+            Intent permission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + context.getPackageName()));
+            permission.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(permission);
+            reconcile(context);
+            return;
+        }
         reconcile(context);
     }
 

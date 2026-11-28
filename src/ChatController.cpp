@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QRandomGenerator>
 #include <QSslError>
+#include <QSslSocket>
 #include <QUuid>
 #include <functional>
 
@@ -781,6 +782,17 @@ void ChatController::connectAll()
     m_messages.clear();
     emit messagesChanged();
     saveSettings();
+    if (!QSslSocket::supportsSsl()) {
+        const QString reason = QStringLiteral("TLS no está disponible: falta el backend OpenSSL o sus bibliotecas en este APK.");
+        if (!m_twitchChannel.isEmpty())
+            setStatus(QStringLiteral("Twitch"), reason);
+        if (!m_kickChannel.isEmpty())
+            setStatus(QStringLiteral("Kick"), reason);
+        if (!m_youtubeChannel.isEmpty())
+            setStatus(QStringLiteral("YouTube"), reason);
+        setStatus(QStringLiteral("Chat"), reason);
+        return;
+    }
     bool any = false;
     if (!m_twitchChannel.isEmpty()) {
         connectTwitch();

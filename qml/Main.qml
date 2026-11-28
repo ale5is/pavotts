@@ -16,6 +16,31 @@ ApplicationWindow {
     property bool settingsPage: true
     property bool compact: width < 760
 
+    function keepFocusedFieldVisible() {
+        var item = window.activeFocusItem
+        if (!item || !settingsPage)
+            return
+        var point = item.mapToItem(settingsFlickable.contentItem, 0, 0)
+        var itemTop = point.y
+        var itemBottom = point.y + item.height
+        var visibleTop = settingsFlickable.contentY
+        var visibleBottom = visibleTop + settingsFlickable.height
+        if (itemBottom > visibleBottom)
+            settingsFlickable.contentY = Math.min(settingsFlickable.contentHeight - settingsFlickable.height, itemBottom - settingsFlickable.height + 28)
+        else if (itemTop < visibleTop)
+            settingsFlickable.contentY = Math.max(0, itemTop - 20)
+    }
+
+    onActiveFocusItemChanged: Qt.callLater(keepFocusedFieldVisible)
+
+    Connections {
+        target: Qt.inputMethod
+        function onVisibleChanged() {
+            if (Qt.inputMethod.visible)
+                Qt.callLater(window.keepFocusedFieldVisible)
+        }
+    }
+
     component Panel: Rectangle {
         radius: 16
         color: "#141d2b"
@@ -152,6 +177,7 @@ ApplicationWindow {
             currentIndex: settingsPage ? 0 : 1
 
             Flickable {
+                id: settingsFlickable
                 clip: true
                 contentWidth: width
                 contentHeight: settingsColumn.implicitHeight

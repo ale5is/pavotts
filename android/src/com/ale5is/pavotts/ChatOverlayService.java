@@ -21,7 +21,6 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
-import android.view.animation.LinearInterpolator;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -125,6 +124,7 @@ public final class ChatOverlayService extends Service {
 
     private void removeTicker() {
         handler.removeCallbacks(tickerAdvance);
+        animating = false;
         if (ticker != null) {
             ticker.setSelected(false);
             try { windowManager.removeView(ticker); } catch (RuntimeException ignored) {}
@@ -264,8 +264,10 @@ public final class ChatOverlayService extends Service {
                     if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5))
                         dragged[0] = true;
                     if (dragged[0]) {
-                        current.x = Math.max(0, windowStart[0] - Math.round(dx));
-                        current.y = Math.max(0, windowStart[1] - Math.round(dy));
+                        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - dp(58));
+                        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - dp(58));
+                        current.x = Math.max(0, Math.min(maxX, windowStart[0] - Math.round(dx)));
+                        current.y = Math.max(0, Math.min(maxY, windowStart[1] - Math.round(dy)));
                         try { windowManager.updateViewLayout(overlayRoot, current); }
                         catch (RuntimeException ignored) {}
                     }

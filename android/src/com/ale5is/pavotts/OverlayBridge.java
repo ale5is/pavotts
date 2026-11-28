@@ -41,13 +41,8 @@ public final class OverlayBridge {
         boolean audio = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(AUDIO_ENABLED, false);
         if (overlay && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                && !Settings.canDrawOverlays(activity)) {
-            Intent permission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + activity.getPackageName()));
-            permission.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            activity.startActivity(permission);
+                && !Settings.canDrawOverlays(activity))
             return;
-        }
         if (overlay || audio)
             reconcile(activity);
     }

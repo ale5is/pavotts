@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
@@ -15,17 +16,16 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.text.TextUtils;
-import android.view.MotionEvent;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.content.pm.ServiceInfo;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Queue;
@@ -37,15 +37,21 @@ public final class ChatOverlayService extends Service {
     private static final String BUBBLE_ENABLED = "enabled";
     private static final String TICKER_ENABLED = "ticker_enabled";
     private static final String CHANNEL_ID = "pavotts_overlay";
+    private static final int BUBBLE_SIZE_DP = 58;
+    private static final int PANEL_WIDTH_DP = 276;
+    private static final int PANEL_HEIGHT_DP = 320;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Queue<String> messages = new ArrayDeque<>();
     private final Deque<String> chatHistory = new ArrayDeque<>();
     private WindowManager windowManager;
     private TextView ticker;
-    private LinearLayout overlayRoot;
+    private View bubble;
     private LinearLayout chatPanel;
     private TextView chatContent;
     private ScrollView chatScroll;
+    private WindowManager.LayoutParams bubbleParams;
+    private WindowManager.LayoutParams panelParams;
+    private boolean panelVisible;
     private boolean animating;
     private PowerManager.WakeLock wakeLock;
 
@@ -115,7 +121,7 @@ public final class ChatOverlayService extends Service {
         }
 
         if (bubbleEnabled && allowed) {
-            if (overlayRoot == null)
+            if (bubble == null)
                 createBubbleAndChat();
         } else {
             removeBubble();
@@ -133,13 +139,15 @@ public final class ChatOverlayService extends Service {
     }
 
     private void removeBubble() {
-        if (overlayRoot != null) {
-            try { windowManager.removeView(overlayRoot); } catch (RuntimeException ignored) {}
-            overlayRoot = null;
-            chatPanel = null;
-            chatContent = null;
-            chatScroll = null;
+        closePanel();
+        if (bubble != null) {
+            try { windowManager.removeView(bubble); } catch (RuntimeException ignored) {}
+            bubble = null;
+            bubbleParams = null;
         }
+        chatPanel = null;
+        chatContent = null;
+        chatScroll = null;
     }
 
     private void removeOverlay() {
@@ -169,7 +177,7 @@ public final class ChatOverlayService extends Service {
                 dp(46),
                 overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
@@ -183,11 +191,6 @@ public final class ChatOverlayService extends Service {
     }
 
     private void createBubbleAndChat() {
-        overlayRoot = new LinearLayout(this);
-        overlayRoot.setOrientation(LinearLayout.VERTICAL);
-        overlayRoot.setGravity(Gravity.END);
-        overlayRoot.setPadding(0, 0, 0, 0);
-
         chatPanel = new LinearLayout(this);
         chatPanel.setOrientation(LinearLayout.VERTICAL);
         chatPanel.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -204,15 +207,15 @@ public final class ChatOverlayService extends Service {
         title.setTextColor(Color.WHITE);
         title.setTextSize(14);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        Button close = new Button(this);
+        close.setText("×");
+        close.setTextColor(Color.WHITE);
+        close.setTextSize(20);
+        close.setMinWidth(dp(42));
+        close.setMinimumWidth(dp(42));
+        close.setOnClickListener(v -> closePanel());
         header.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
-
-        Button collapse = new Button(this);
-        collapse.setText("—");
-        collapse.setTextColor(Color.WHITE);
-        collapse.setMinWidth(dp(42));
-        collapse.setMinimumWidth(dp(42));
-        collapse.setOnClickListener(v -> setExpanded(false));
-        header.addView(collapse, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(40)));
         chatPanel.addView(header);
 
         chatScroll = new ScrollView(this);
@@ -232,30 +235,42 @@ public final class ChatOverlayService extends Service {
         }
         chatScroll.addView(chatContent);
         chatPanel.addView(chatScroll, new LinearLayout.LayoutParams(
-                dp(276), dp(290)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(260)));
 
-        TextView bubble = new TextView(this);
-        bubble.setText("P");
-        bubble.setTextColor(Color.WHITE);
-        bubble.setTextSize(22);
-        bubble.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        bubble.setGravity(Gravity.CENTER);
+        bubble = new TextView(this);
+        ((TextView) bubble).setText("P");
+        ((TextView) bubble).setTextColor(Color.WHITE);
+        ((TextView) bubble).setTextSize(22);
+        ((TextView) bubble).setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        ((TextView) bubble).setGravity(Gravity.CENTER);
         GradientDrawable bubbleBackground = new GradientDrawable();
         bubbleBackground.setColor(0xFF2388E8);
         bubbleBackground.setShape(GradientDrawable.OVAL);
         bubble.setBackground(bubbleBackground);
         bubble.setElevation(dp(8));
+
+        bubbleParams = new WindowManager.LayoutParams(
+                dp(BUBBLE_SIZE_DP), dp(BUBBLE_SIZE_DP), overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        bubbleParams.gravity = Gravity.TOP | Gravity.LEFT;
+        bubbleParams.x = Math.max(0, getResources().getDisplayMetrics().widthPixels - dp(72));
+        bubbleParams.y = Math.max(dp(80), getResources().getDisplayMetrics().heightPixels - dp(150));
+
         final float[] touchStart = new float[2];
         final int[] windowStart = new int[2];
         final boolean[] dragged = new boolean[1];
         bubble.setOnTouchListener((view, event) -> {
-            WindowManager.LayoutParams current = (WindowManager.LayoutParams) overlayRoot.getLayoutParams();
+            if (bubbleParams == null)
+                return true;
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
                     touchStart[0] = event.getRawX();
                     touchStart[1] = event.getRawY();
-                    windowStart[0] = current.x;
-                    windowStart[1] = current.y;
+                    windowStart[0] = bubbleParams.x;
+                    windowStart[1] = bubbleParams.y;
                     dragged[0] = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
@@ -264,17 +279,17 @@ public final class ChatOverlayService extends Service {
                     if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5))
                         dragged[0] = true;
                     if (dragged[0]) {
-                        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - dp(58));
-                        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - dp(58));
-                        current.x = Math.max(0, Math.min(maxX, windowStart[0] - Math.round(dx)));
-                        current.y = Math.max(0, Math.min(maxY, windowStart[1] - Math.round(dy)));
-                        try { windowManager.updateViewLayout(overlayRoot, current); }
+                        int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - dp(BUBBLE_SIZE_DP));
+                        int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - dp(BUBBLE_SIZE_DP));
+                        bubbleParams.x = Math.max(0, Math.min(maxX, windowStart[0] + Math.round(dx)));
+                        bubbleParams.y = Math.max(0, Math.min(maxY, windowStart[1] + Math.round(dy)));
+                        try { windowManager.updateViewLayout(bubble, bubbleParams); }
                         catch (RuntimeException ignored) {}
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
                     if (!dragged[0])
-                        setExpanded(true);
+                        openPanel();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     return true;
@@ -282,47 +297,98 @@ public final class ChatOverlayService extends Service {
             return true;
         });
 
-        overlayRoot.addView(chatPanel, new LinearLayout.LayoutParams(dp(300), dp(350)));
-        overlayRoot.addView(bubble, new LinearLayout.LayoutParams(dp(58), dp(58)));
-        chatPanel.setVisibility(View.GONE);
+        try {
+            windowManager.addView(bubble, bubbleParams);
+        } catch (RuntimeException ignored) {
+            bubble = null;
+            bubbleParams = null;
+        }
+    }
 
-        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                dp(58), WindowManager.LayoutParams.WRAP_CONTENT,
-                overlayType(),
+    private void openPanel() {
+        if (bubble == null || bubbleParams == null || chatPanel == null || panelVisible)
+            return;
+
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        int bubbleSize = dp(BUBBLE_SIZE_DP);
+        int panelWidth = dp(PANEL_WIDTH_DP);
+        int panelHeight = dp(PANEL_HEIGHT_DP);
+        int bubbleCenterX = bubbleParams.x + bubbleSize / 2;
+        int bubbleCenterY = bubbleParams.y + bubbleSize / 2;
+        boolean bubbleOnRight = bubbleCenterX >= screenWidth / 2;
+        boolean bubbleOnBottom = bubbleCenterY >= screenHeight / 2;
+
+        panelParams = new WindowManager.LayoutParams(
+                panelWidth, panelHeight, overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
-        params.gravity = Gravity.BOTTOM | Gravity.END;
-        params.x = dp(14);
-        params.y = dp(72);
-        try {
-            windowManager.addView(overlayRoot, params);
-            setExpanded(false);
-        } catch (RuntimeException ignored) {
-            overlayRoot = null;
+        panelParams.gravity = Gravity.TOP | Gravity.LEFT;
+
+        int panelX = bubbleOnRight
+                ? bubbleParams.x + bubbleSize - panelWidth
+                : bubbleParams.x;
+        int panelY = bubbleOnBottom
+                ? bubbleParams.y - panelHeight
+                : bubbleParams.y + bubbleSize;
+        panelParams.x = Math.max(0, Math.min(Math.max(0, screenWidth - panelWidth), panelX));
+        panelParams.y = Math.max(0, Math.min(Math.max(0, screenHeight - panelHeight), panelY));
+
+        if (bubbleOnRight) {
+            headerCloseOnRight();
+        } else {
+            headerCloseOnLeft();
         }
+
+        chatPanel.setOnTouchListener((view, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
+                closePanel();
+                return true;
+            }
+            return false;
+        });
+        try {
+            windowManager.addView(chatPanel, panelParams);
+            panelVisible = true;
+        } catch (RuntimeException ignored) {
+            panelParams = null;
+            panelVisible = false;
+        }
+    }
+
+    private void headerCloseOnRight() {
+        LinearLayout header = (LinearLayout) chatPanel.getChildAt(0);
+        View title = header.getChildAt(0);
+        View close = header.getChildAt(1);
+        header.removeAllViews();
+        header.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
+        header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(40)));
+    }
+
+    private void headerCloseOnLeft() {
+        LinearLayout header = (LinearLayout) chatPanel.getChildAt(0);
+        View title = header.getChildAt(0);
+        View close = header.getChildAt(1);
+        header.removeAllViews();
+        header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        header.addView(title, new LinearLayout.LayoutParams(0, dp(40), 1));
+    }
+
+    private void closePanel() {
+        if (chatPanel != null && panelVisible) {
+            try { windowManager.removeView(chatPanel); } catch (RuntimeException ignored) {}
+        }
+        panelVisible = false;
+        panelParams = null;
     }
 
     private int overlayType() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 : WindowManager.LayoutParams.TYPE_PHONE;
-    }
-
-    private void setExpanded(boolean expanded) {
-        if (chatPanel == null || overlayRoot == null)
-            return;
-        chatPanel.setVisibility(expanded ? View.VISIBLE : View.GONE);
-        View bubble = overlayRoot.getChildAt(1);
-        if (bubble != null)
-            bubble.setVisibility(expanded ? View.GONE : View.VISIBLE);
-        WindowManager.LayoutParams params = (WindowManager.LayoutParams) overlayRoot.getLayoutParams();
-        params.width = expanded ? dp(300) : dp(58);
-        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        try {
-            windowManager.updateViewLayout(overlayRoot, params);
-        } catch (RuntimeException ignored) {}
     }
 
     private void appendToChat(String message) {

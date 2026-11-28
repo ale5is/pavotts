@@ -14,6 +14,9 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.text.TextUtils;
+import android.view.MotionEvent;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
@@ -31,6 +34,8 @@ public final class ChatOverlayService extends Service {
     public static final String ACTION_MESSAGE = "com.ale5is.pavotts.OVERLAY_MESSAGE";
     public static final String EXTRA_MESSAGE = "message";
     private static final String PREFS = "pavotts_overlay";
+    private static final String BUBBLE_ENABLED = "enabled";
+    private static final String TICKER_ENABLED = "ticker_enabled";
     private static final String CHANNEL_ID = "pavotts_overlay";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Queue<String> messages = new ArrayDeque<>();
@@ -41,11 +46,18 @@ public final class ChatOverlayService extends Service {
     private TextView chatContent;
     private ScrollView chatScroll;
     private boolean animating;
+    private PowerManager.WakeLock wakeLock;
 
     @Override
     public void onCreate() {
         super.onCreate();
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PavoTTS:ChatBackground");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire();
+        }
         createNotificationChannel();
         Notification notification = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -84,24 +96,36 @@ public final class ChatOverlayService extends Service {
     }
 
     private void syncOverlay() {
-        boolean enabled = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean("enabled", false);
-        if (enabled && canDrawOverlays()) {
-            if (overlayRoot == null) {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        boolean bubbleEnabled = prefs.getBoolean(BUBBLE_ENABLED, false);
+        boolean tickerEnabled = prefs.getBoolean(TICKER_ENABLED, false);
+        boolean allowed = canDrawOverlays();
+
+        if (tickerEnabled && allowed) {
+            if (ticker == null)
                 createTicker();
-                createBubbleAndChat();
-            }
         } else {
-            removeOverlay();
+            removeTicker();
+        }
+
+        if (bubbleEnabled && allowed) {
+            if (overlayRoot == null)
+                createBubbleAndChat();
+        } else {
+            removeBubble();
         }
     }
 
-    private void removeOverlay() {
+    private void removeTicker() {
+        handler.removeCallbacks(tickerAdvance);
         if (ticker != null) {
-            ticker.animate().cancel();
+            ticker.setSelected(false);
             try { windowManager.removeView(ticker); } catch (RuntimeException ignored) {}
             ticker = null;
         }
+    }
+
+    private void removeBubble() {
         if (overlayRoot != null) {
             try { windowManager.removeView(overlayRoot); } catch (RuntimeException ignored) {}
             overlayRoot = null;
@@ -111,20 +135,31 @@ public final class ChatOverlayService extends Service {
         }
     }
 
+    private void removeOverlay() {
+        removeTicker();
+        removeBubble();
+    }
+
     private void createTicker() {
         ticker = new TextView(this);
         ticker.setTextColor(Color.WHITE);
-        ticker.setTextSize(16);
+        ticker.setTextSize(15);
         ticker.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         ticker.setSingleLine(true);
-        ticker.setPadding(dp(16), dp(10), dp(16), dp(10));
+        ticker.setEllipsize(TextUtils.TruncateAt.MARQUEE);
+        ticker.setMarqueeRepeatLimit(-1);
+        ticker.setSelected(true);
+        ticker.setGravity(Gravity.CENTER_VERTICAL);
+        ticker.setPadding(dp(16), dp(8), dp(16), dp(8));
+        ticker.setText("PavoTTS · esperando mensajes");
         GradientDrawable background = new GradientDrawable();
-        background.setColor(0xE817202E);
-        background.setCornerRadius(dp(12));
+        background.setColor(0xF0182435);
+        background.setCornerRadius(dp(10));
+        background.setStroke(dp(1), 0xFF3B5878);
         ticker.setBackground(background);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                dp(46),
                 overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -134,7 +169,7 @@ public final class ChatOverlayService extends Service {
         params.y = dp(36);
         try {
             windowManager.addView(ticker, params);
-            ticker.setVisibility(View.GONE);
+            ticker.setVisibility(View.VISIBLE);
         } catch (RuntimeException ignored) {
             ticker = null;
         }
@@ -194,7 +229,40 @@ public final class ChatOverlayService extends Service {
         bubbleBackground.setShape(GradientDrawable.OVAL);
         bubble.setBackground(bubbleBackground);
         bubble.setElevation(dp(8));
-        bubble.setOnClickListener(v -> setExpanded(true));
+        final float[] touchStart = new float[2];
+        final int[] windowStart = new int[2];
+        final boolean[] dragged = new boolean[1];
+        bubble.setOnTouchListener((view, event) -> {
+            WindowManager.LayoutParams current = (WindowManager.LayoutParams) overlayRoot.getLayoutParams();
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    touchStart[0] = event.getRawX();
+                    touchStart[1] = event.getRawY();
+                    windowStart[0] = current.x;
+                    windowStart[1] = current.y;
+                    dragged[0] = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    float dx = event.getRawX() - touchStart[0];
+                    float dy = event.getRawY() - touchStart[1];
+                    if (Math.abs(dx) > dp(5) || Math.abs(dy) > dp(5))
+                        dragged[0] = true;
+                    if (dragged[0]) {
+                        current.x = Math.max(0, windowStart[0] - Math.round(dx));
+                        current.y = Math.max(0, windowStart[1] - Math.round(dy));
+                        try { windowManager.updateViewLayout(overlayRoot, current); }
+                        catch (RuntimeException ignored) {}
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!dragged[0])
+                        setExpanded(true);
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+            }
+            return true;
+        });
 
         overlayRoot.addView(chatPanel, new LinearLayout.LayoutParams(dp(300), dp(350)));
         overlayRoot.addView(bubble, new LinearLayout.LayoutParams(dp(58), dp(58)));
@@ -261,41 +329,25 @@ public final class ChatOverlayService extends Service {
             chatScroll.post(() -> chatScroll.fullScroll(View.FOCUS_DOWN));
     }
 
+    private final Runnable tickerAdvance = new Runnable() {
+        @Override
+        public void run() {
+            animating = false;
+            showNext();
+        }
+    };
+
     private void showNext() {
-        if (animating || ticker == null || messages.isEmpty())
+        if (ticker == null || messages.isEmpty())
             return;
         String next = messages.poll();
+        ticker.setSelected(false);
         ticker.setText(next);
-        ticker.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(dp(64), View.MeasureSpec.AT_MOST));
-        int textWidth = Math.max(dp(80), ticker.getMeasuredWidth());
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        WindowManager.LayoutParams params = (WindowManager.LayoutParams) ticker.getLayoutParams();
-        params.width = textWidth;
-        try {
-            windowManager.updateViewLayout(ticker, params);
-        } catch (RuntimeException ignored) {
-            animating = false;
-            return;
-        }
-        ticker.setTranslationX(-textWidth);
-        ticker.setVisibility(View.VISIBLE);
+        ticker.setSelected(true);
         animating = true;
-        float density = getResources().getDisplayMetrics().density;
-        float speedPixelsPerSecond = 42f * density;
-        long duration = Math.max(3500L, (long) ((screenWidth + textWidth) / speedPixelsPerSecond * 1000f));
-        ticker.animate().cancel();
-        ticker.animate()
-                .translationX(screenWidth)
-                .setDuration(duration)
-                .setInterpolator(new LinearInterpolator())
-                .withEndAction(() -> {
-                    ticker.setVisibility(View.GONE);
-                    animating = false;
-                    handler.postDelayed(this::showNext, 250);
-                })
-                .start();
+        long duration = Math.max(6500L, Math.min(45000L, next.length() * 420L));
+        handler.removeCallbacks(tickerAdvance);
+        handler.postDelayed(tickerAdvance, duration);
     }
 
     private int dp(int value) {
@@ -314,6 +366,8 @@ public final class ChatOverlayService extends Service {
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
         removeOverlay();
+        if (wakeLock != null && wakeLock.isHeld())
+            wakeLock.release();
         super.onDestroy();
     }
 

@@ -338,7 +338,7 @@ public final class ChatOverlayService extends Service {
     };
 
     private void showNext() {
-        if (ticker == null || messages.isEmpty())
+        if (animating || ticker == null || messages.isEmpty())
             return;
         String next = messages.poll();
         ticker.setSelected(false);

@@ -167,12 +167,21 @@ jobs:
         run: |
           mkdir -p "$HOME/.gradle/init.d"
           cat > "$HOME/.gradle/init.d/maven-fallback.gradle" <<'EOF'
-          allprojects {
-              repositories {
-                  maven {
-                      name = "MavenCentralGoogleMirror"
-                      url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
-                  }
+          def centralMirror = {
+              maven {
+                  name = "MavenCentralGoogleMirror"
+                  url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
+              }
+          }
+
+          gradle.beforeProject { project ->
+              project.buildscript.repositories {
+                  centralMirror.delegate = delegate
+                  centralMirror()
+              }
+              project.repositories {
+                  centralMirror.delegate = delegate
+                  centralMirror()
               }
           }
           EOF

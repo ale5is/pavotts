@@ -5,7 +5,7 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: window
-    Component.onCompleted: { chat.setOverlayEnabled(chat.overlayEnabled); chat.setTtsEnabled(chat.ttsEnabled) }
+    Component.onCompleted: { chat.setOverlayEnabled(chat.overlayEnabled); chat.setTickerEnabled(chat.tickerEnabled); chat.setTtsEnabled(chat.ttsEnabled) }
     width: 1280
     height: 720
     minimumWidth: 360
@@ -263,21 +263,36 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Switch {
-                                    text: chat.overlayEnabled ? "Superposición activada" : "Mostrar chat sobre otras apps"
+                                    text: chat.tickerEnabled ? "Cinta visible" : "Activar línea de mensajes"
+                                    checked: chat.tickerEnabled
+                                    onToggled: chat.setTickerEnabled(checked)
+                                }
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: "La cinta es independiente de la burbuja: queda fija arriba y desplaza cada mensaje completo de forma continua. Si todavía no llegan mensajes, muestra «PavoTTS · esperando mensajes»."
+                                color: "#91a4bd"
+                                font.pixelSize: 10
+                                wrapMode: Text.Wrap
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Switch {
+                                    text: chat.overlayEnabled ? "Burbuja flotante activada" : "Activar burbuja flotante"
                                     checked: chat.overlayEnabled
                                     onToggled: chat.setOverlayEnabled(checked)
                                 }
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: "Muestra una burbuja circular sobre otras aplicaciones. Al tocarla se abre una ventana compacta con los últimos mensajes. También desplaza cada mensaje completo en una cinta lenta. Android debe permitir que PavoTTS se muestre encima de otras apps."
+                                text: "La burbuja azul se puede arrastrar manteniéndola pulsada. Tocarla abre el chat compacto; el botón — lo vuelve a cerrar. Podés activar la cinta, la burbuja o ambas."
                                 color: "#91a4bd"
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: "La burbuja y la ventana compacta comparten los mensajes que ya recibe PavoTTS. El servicio en primer plano mantiene activo el audio TTS cuando minimizás la app."
+                                text: "El servicio en primer plano mantiene el proceso activo y usa un bloqueo parcial de CPU para ayudar a recibir mensajes mientras PavoTTS está minimizado. Android puede seguir limitando la red o detener la app si se fuerza su cierre."
                                 color: "#91a4bd"
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap

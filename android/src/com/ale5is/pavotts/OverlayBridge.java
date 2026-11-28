@@ -58,10 +58,12 @@ public final class OverlayBridge {
                 .getBoolean(ENABLED, false);
         boolean audio = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(AUDIO_ENABLED, false);
-        if (overlay && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+        boolean ticker = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(TICKER_ENABLED, false);
+        if ((overlay || ticker) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                 && !Settings.canDrawOverlays(activity))
             return;
-        if (overlay || audio)
+        if (overlay || ticker || audio)
             reconcile(activity);
     }
 

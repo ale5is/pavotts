@@ -1303,7 +1303,6 @@ void ChatController::connectYouTube()
     auto *reply = m_network.get(pageRequest);
     m_youtubeReply = reply;
     monitorYouTubeReply(reply);
-    monitorYouTubeReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, channel]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
         const QByteArray response = reply->readAll();

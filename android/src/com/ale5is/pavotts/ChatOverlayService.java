@@ -60,12 +60,12 @@ public final class ChatOverlayService extends Service {
         } else {
             startForeground(41, notification);
         }
-        if (canDrawOverlays())
-            createOverlay();
+        syncOverlay();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        syncOverlay();
         if (intent != null && ACTION_MESSAGE.equals(intent.getAction())) {
             String message = intent.getStringExtra(EXTRA_MESSAGE);
             if (message != null && !message.trim().isEmpty()) {
@@ -83,11 +83,32 @@ public final class ChatOverlayService extends Service {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this);
     }
 
-    private void createOverlay() {
-        if (overlayRoot != null || !canDrawOverlays())
-            return;
-        createTicker();
-        createBubbleAndChat();
+    private void syncOverlay() {
+        boolean enabled = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean("enabled", false);
+        if (enabled && canDrawOverlays()) {
+            if (overlayRoot == null) {
+                createTicker();
+                createBubbleAndChat();
+            }
+        } else {
+            removeOverlay();
+        }
+    }
+
+    private void removeOverlay() {
+        if (ticker != null) {
+            ticker.animate().cancel();
+            try { windowManager.removeView(ticker); } catch (RuntimeException ignored) {}
+            ticker = null;
+        }
+        if (overlayRoot != null) {
+            try { windowManager.removeView(overlayRoot); } catch (RuntimeException ignored) {}
+            overlayRoot = null;
+            chatPanel = null;
+            chatContent = null;
+            chatScroll = null;
+        }
     }
 
     private void createTicker() {
@@ -291,15 +312,7 @@ public final class ChatOverlayService extends Service {
     @Override
     public void onDestroy() {
         handler.removeCallbacksAndMessages(null);
-        if (ticker != null) {
-            ticker.animate().cancel();
-            try { windowManager.removeView(ticker); } catch (RuntimeException ignored) {}
-            ticker = null;
-        }
-        if (overlayRoot != null) {
-            try { windowManager.removeView(overlayRoot); } catch (RuntimeException ignored) {}
-            overlayRoot = null;
-        }
+        removeOverlay();
         super.onDestroy();
     }
 

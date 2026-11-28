@@ -5,7 +5,7 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: window
-    Component.onCompleted: chat.setOverlayEnabled(chat.overlayEnabled)
+    Component.onCompleted: { chat.setOverlayEnabled(chat.overlayEnabled); chat.setTtsEnabled(chat.ttsEnabled) }
     width: 1280
     height: 720
     minimumWidth: 360
@@ -259,7 +259,7 @@ ApplicationWindow {
                             id: overlayColumn
                             anchors.fill: parent
                             anchors.margins: 14
-                            Label { text: "CINTA FLOTANTE"; color: "#62c4ff"; font.bold: true; font.letterSpacing: 1.2 }
+                            Label { text: "CHAT FLOTANTE Y CINTA"; color: "#62c4ff"; font.bold: true; font.letterSpacing: 1.2 }
                             RowLayout {
                                 Layout.fillWidth: true
                                 Switch {
@@ -270,14 +270,14 @@ ApplicationWindow {
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: "Muestra cada mensaje completo en una cinta horizontal lenta, incluso encima de juegos. Al activarla por primera vez, Android te pedirá permiso para mostrar sobre otras aplicaciones. La cinta se desplaza a 42 dp/s y conserva los mensajes largos completos."
+                                text: "Muestra una burbuja circular sobre otras aplicaciones. Al tocarla se abre una ventana compacta con los últimos mensajes. También desplaza cada mensaje completo en una cinta lenta. Android debe permitir que PavoTTS se muestre encima de otras apps."
                                 color: "#91a4bd"
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: "La superposición utiliza los mensajes que ya recibe PavoTTS; no agrega conexiones ni consultas de red."
+                                text: "La burbuja y la ventana compacta comparten los mensajes que ya recibe PavoTTS. El servicio en primer plano mantiene activo el audio TTS cuando minimizás la app."
                                 color: "#91a4bd"
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap

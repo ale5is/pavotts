@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <application android:name="org.qtproject.qt.android.bindings.QtApplication"
         android:label="PavoTTS" android:usesCleartextTraffic="false">
         <activity android:name="com.ale5is.pavotts.MainActivity"
@@ -22,7 +23,7 @@
         <service
             android:name="com.ale5is.pavotts.ChatOverlayService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|mediaPlayback">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Display live chat messages in a user-enabled floating overlay." />

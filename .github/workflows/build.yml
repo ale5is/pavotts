@@ -189,9 +189,40 @@ jobs:
             fi
           done
           exit 1
+      - name: Sign Android Release APK
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APK="$(find build-android -type f -name '*release-unsigned.apk' -print -quit)"
+          test -n "$APK"
+          mkdir -p build-android/signed
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            test -n "${ANDROID_KEYSTORE_PASSWORD:-}"
+            test -n "${ANDROID_KEY_ALIAS:-}"
+            test -n "${ANDROID_KEY_PASSWORD:-}"
+            KEYSTORE="$RUNNER_TEMP/pavotts-release.keystore"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+            STORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD"
+            KEY_ALIAS="$ANDROID_KEY_ALIAS"
+            KEY_PASSWORD="$ANDROID_KEY_PASSWORD"
+          else
+            KEYSTORE="$RUNNER_TEMP/pavotts-ci-temporary.keystore"
+            STORE_PASSWORD="pavotts-ci-temporary"
+            KEY_ALIAS="pavotts"
+            KEY_PASSWORD="$STORE_PASSWORD"
+            keytool -genkeypair -noprompt -keystore "$KEYSTORE" -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" -keypass "$KEY_PASSWORD" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=PavoTTS CI,O=ale5is,C=AR"
+          fi
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/35.0.0/apksigner"
+          "$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$STORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" --out build-android/signed/PavoTTS-Android-arm64.apk "$APK"
+          "$APKSIGNER" verify --verbose build-android/signed/PavoTTS-Android-arm64.apk
       - name: Upload Android Release APK
         uses: actions/upload-artifact@v4
         with:
           name: pavotts-android-arm64-release
-          path: build-android/**/*.apk
+          path: build-android/signed/PavoTTS-Android-arm64.apk
           if-no-files-found: error

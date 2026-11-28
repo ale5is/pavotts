@@ -285,7 +285,7 @@ ApplicationWindow {
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: "La burbuja azul se puede arrastrar manteniéndola pulsada. Tocarla abre el chat compacto; el botón — lo vuelve a cerrar. Podés activar la cinta, la burbuja o ambas."
+                                text: "La cinta superior no intercepta toques: podés usar la aplicación que queda debajo. La burbuja azul se puede arrastrar; al tocarla, el chat se abre hacia el espacio libre según el lado de la pantalla y el botón × queda junto a la burbuja. Tocar fuera del panel lo cierra sin bloquear la aplicación."
                                 color: "#91a4bd"
                                 font.pixelSize: 10
                                 wrapMode: Text.Wrap

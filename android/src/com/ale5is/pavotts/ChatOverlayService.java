@@ -211,6 +211,34 @@ public final class ChatOverlayService extends Service {
         title.setTextColor(Color.WHITE);
         title.setTextSize(14);
         title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        final float[] panelTouchStart = new float[2];
+        final int[] panelWindowStart = new int[2];
+        title.setOnTouchListener((view, event) -> {
+            if (panelParams == null)
+                return true;
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    panelTouchStart[0] = event.getRawX();
+                    panelTouchStart[1] = event.getRawY();
+                    panelWindowStart[0] = panelParams.x;
+                    panelWindowStart[1] = panelParams.y;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - dp(PANEL_WIDTH_DP));
+                    int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - dp(PANEL_HEIGHT_DP));
+                    panelParams.x = Math.max(0, Math.min(maxX,
+                            panelWindowStart[0] + Math.round(event.getRawX() - panelTouchStart[0])));
+                    panelParams.y = Math.max(0, Math.min(maxY,
+                            panelWindowStart[1] + Math.round(event.getRawY() - panelTouchStart[1])));
+                    try { windowManager.updateViewLayout(chatPanel, panelParams); }
+                    catch (RuntimeException ignored) {}
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+            }
+            return true;
+        });
         Button close = new Button(this);
         close.setText("×");
         close.setTextColor(Color.WHITE);

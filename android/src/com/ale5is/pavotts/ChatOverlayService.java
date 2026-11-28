@@ -28,6 +28,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.content.pm.ServiceInfo;
 import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Queue;
 
 public final class ChatOverlayService extends Service {
@@ -39,6 +40,7 @@ public final class ChatOverlayService extends Service {
     private static final String CHANNEL_ID = "pavotts_overlay";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Queue<String> messages = new ArrayDeque<>();
+    private final Deque<String> chatHistory = new ArrayDeque<>();
     private WindowManager windowManager;
     private TextView ticker;
     private LinearLayout overlayRoot;
@@ -84,6 +86,9 @@ public final class ChatOverlayService extends Service {
                 if (messages.size() >= 100)
                     messages.poll();
                 messages.offer(message);
+                chatHistory.offerLast(message);
+                while (chatHistory.size() > 40)
+                    chatHistory.pollFirst();
                 appendToChat(message);
                 showNext();
             }
@@ -102,8 +107,10 @@ public final class ChatOverlayService extends Service {
         boolean allowed = canDrawOverlays();
 
         if (tickerEnabled && allowed) {
-            if (ticker == null)
+            if (ticker == null) {
                 createTicker();
+                showNext();
+            }
         } else {
             removeTicker();
         }
@@ -214,6 +221,15 @@ public final class ChatOverlayService extends Service {
         chatContent.setTextSize(13);
         chatContent.setPadding(dp(4), dp(8), dp(4), dp(8));
         chatContent.setText("Los mensajes nuevos aparecerán aquí.");
+        if (!chatHistory.isEmpty()) {
+            StringBuilder history = new StringBuilder();
+            for (String item : chatHistory) {
+                if (history.length() > 0)
+                    history.append("\n\n");
+                history.append(item);
+            }
+            chatContent.setText(history.toString());
+        }
         chatScroll.addView(chatContent);
         chatPanel.addView(chatScroll, new LinearLayout.LayoutParams(
                 dp(276), dp(290)));

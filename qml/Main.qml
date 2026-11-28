@@ -26,18 +26,31 @@ ApplicationWindow {
         var visibleTop = settingsFlickable.contentY
         var visibleBottom = visibleTop + settingsFlickable.height
         if (itemBottom > visibleBottom)
-            settingsFlickable.contentY = Math.min(settingsFlickable.contentHeight - settingsFlickable.height, itemBottom - settingsFlickable.height + 28)
+            settingsFlickable.contentY = Math.max(0, Math.min(settingsFlickable.contentHeight - settingsFlickable.height, itemBottom - settingsFlickable.height + 28))
         else if (itemTop < visibleTop)
             settingsFlickable.contentY = Math.max(0, itemTop - 20)
     }
 
-    onActiveFocusItemChanged: Qt.callLater(keepFocusedFieldVisible)
+    onActiveFocusItemChanged: {
+        Qt.callLater(keepFocusedFieldVisible)
+        if (Qt.inputMethod.visible)
+            focusScrollTimer.restart()
+    }
+
+    Timer {
+        id: focusScrollTimer
+        interval: 140
+        repeat: false
+        onTriggered: window.keepFocusedFieldVisible()
+    }
 
     Connections {
         target: Qt.inputMethod
         function onVisibleChanged() {
-            if (Qt.inputMethod.visible)
+            if (Qt.inputMethod.visible) {
                 Qt.callLater(window.keepFocusedFieldVisible)
+                focusScrollTimer.restart()
+            }
         }
     }
 

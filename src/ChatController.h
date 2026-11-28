@@ -93,6 +93,7 @@ private:
     void connectTwitch();
     void connectKick();
     void connectYouTube();
+    void monitorYouTubeReply(QNetworkReply *reply);
     void handleTwitchLine(const QString &line, QWebSocket *socket);
     void handleKickFrame(const QJsonObject &frame, QWebSocket *socket);
     void requestYouTubeResolveChannel(const QString &handle);

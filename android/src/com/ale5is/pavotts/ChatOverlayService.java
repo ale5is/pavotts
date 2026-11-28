@@ -198,10 +198,10 @@ public final class ChatOverlayService extends Service {
 
         overlayRoot.addView(chatPanel, new LinearLayout.LayoutParams(dp(300), dp(350)));
         overlayRoot.addView(bubble, new LinearLayout.LayoutParams(dp(58), dp(58)));
-        setExpanded(false);
+        chatPanel.setVisibility(View.GONE);
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
+                dp(58), WindowManager.LayoutParams.WRAP_CONTENT,
                 overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -212,6 +212,7 @@ public final class ChatOverlayService extends Service {
         params.y = dp(72);
         try {
             windowManager.addView(overlayRoot, params);
+            setExpanded(false);
         } catch (RuntimeException ignored) {
             overlayRoot = null;
         }
@@ -231,7 +232,7 @@ public final class ChatOverlayService extends Service {
         if (bubble != null)
             bubble.setVisibility(expanded ? View.GONE : View.VISIBLE);
         WindowManager.LayoutParams params = (WindowManager.LayoutParams) overlayRoot.getLayoutParams();
-        params.width = dp(300);
+        params.width = expanded ? dp(300) : dp(58);
         params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         try {
             windowManager.updateViewLayout(overlayRoot, params);

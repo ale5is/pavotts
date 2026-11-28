@@ -19,41 +19,37 @@ ApplicationWindow {
     function keepFocusedFieldVisible() {
         var item = window.activeFocusItem
         if (!item || !settingsPage || !settingsFlickable.visible)
-            return false
+            return
 
-        var keyboard = Qt.inputMethod.keyboardRectangle
         var viewportHeight = settingsFlickable.height
+        var keyboard = Qt.inputMethod.keyboardRectangle
         if (Qt.inputMethod.visible && keyboard.height > 0) {
-            var keyboardTop = settingsFlickable.mapFromItem(null, 0, keyboard.y).y
+            var keyboardTop = settingsFlickable.mapFromItem(window.contentItem, 0, keyboard.y).y
             viewportHeight = Math.max(0, Math.min(viewportHeight, keyboardTop))
         }
+
+        if (viewportHeight <= 0)
+            return
 
         var point = item.mapToItem(settingsFlickable.contentItem, 0, 0)
         var itemTop = point.y
         var itemBottom = point.y + item.height
         var visibleTop = settingsFlickable.contentY
-        var visibleBottom = visibleTop + viewportHeight - 20
+        var visibleBottom = visibleTop + viewportHeight - 24
         var targetY = settingsFlickable.contentY
 
         if (itemBottom > visibleBottom)
-            targetY = itemBottom - viewportHeight + 36
+            targetY = itemBottom - viewportHeight + 40
         else if (itemTop < visibleTop)
             targetY = itemTop - 20
 
         targetY = Math.max(0, Math.min(settingsFlickable.contentHeight - viewportHeight, targetY))
-        if (Math.abs(targetY - settingsFlickable.contentY) > 1) {
-            settingsFlickable.contentY = targetY
-            return true
-        }
-        return false
+        settingsFlickable.contentY = targetY
     }
 
     function scheduleFocusedFieldScroll() {
-        focusScrollAttempts = 0
         focusScrollTimer.restart()
     }
-
-    property int focusScrollAttempts: 0
 
     onActiveFocusItemChanged: {
         Qt.callLater(function() { window.scheduleFocusedFieldScroll() })
@@ -61,24 +57,14 @@ ApplicationWindow {
 
     Timer {
         id: focusScrollTimer
-        interval: 180
+        interval: 350
         repeat: false
-        onTriggered: {
-            var moved = window.keepFocusedFieldVisible()
-            if (Qt.inputMethod.visible && moved && window.focusScrollAttempts < 8) {
-                window.focusScrollAttempts++
-                restart()
-            }
-        }
+        onTriggered: window.keepFocusedFieldVisible()
     }
 
     Connections {
         target: Qt.inputMethod
         function onVisibleChanged() {
-            if (Qt.inputMethod.visible)
-                Qt.callLater(function() { window.scheduleFocusedFieldScroll() })
-        }
-        function onKeyboardRectangleChanged() {
             if (Qt.inputMethod.visible)
                 Qt.callLater(function() { window.scheduleFocusedFieldScroll() })
         }

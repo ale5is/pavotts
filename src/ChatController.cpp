@@ -1239,6 +1239,25 @@ void ChatController::handleKickFrame(const QJsonObject &frame, QWebSocket *socke
         publishMessage(name, message, QStringLiteral("Kick"));
 }
 
+void ChatController::monitorYouTubeReply(QNetworkReply *reply)
+{
+    if (!reply)
+        return;
+    connect(reply, &QNetworkReply::sslErrors, this, [this, reply](const QList<QSslError> &errors) {
+        if (m_stopping || m_youtubeReply != reply)
+            return;
+        QStringList details;
+        for (const QSslError &error : errors)
+            details.append(error.errorString());
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
+    });
+    connect(reply, &QNetworkReply::errorOccurred, this, [this, reply](QNetworkReply::NetworkError) {
+        if (m_stopping || m_youtubeReply != reply)
+            return;
+        setStatus(QStringLiteral("YouTube"), QStringLiteral("Error de red: ") + reply->errorString());
+    });
+}
+
 void ChatController::connectYouTube()
 {
     stopYouTube();
@@ -1282,12 +1301,9 @@ void ChatController::connectYouTube()
     pageRequest.setRawHeader("Accept-Language", "es-AR,es;q=0.9,en;q=0.8");
     pageRequest.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
     auto *reply = m_network.get(pageRequest);
-    connect(reply, &QNetworkReply::sslErrors, this, [this](const QList<QSslError> &errors) {
-        QStringList details;
-        for (const QSslError &error : errors) details.append(error.errorString());
-        setStatus(QStringLiteral("YouTube"), QStringLiteral("Error TLS: ") + details.join(QStringLiteral("; ")));
-    });
     m_youtubeReply = reply;
+    monitorYouTubeReply(reply);
+    monitorYouTubeReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, channel]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
         const QByteArray response = reply->readAll();
@@ -1381,6 +1397,7 @@ void ChatController::requestYouTubeResolveChannel(const QString &handle)
 
     auto *reply = m_network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;
+    monitorYouTubeReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, handle]() {
         if (m_stopping || m_youtubeReply != reply) {
             reply->deleteLater();
@@ -1456,6 +1473,7 @@ void ChatController::requestYouTubeChannelStreams(const QString &channelId)
 
     auto *reply = m_network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;
+    monitorYouTubeReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, channelId]() {
         if (m_stopping || m_youtubeReply != reply) {
             reply->deleteLater();
@@ -1528,6 +1546,7 @@ void ChatController::requestYouTubeInitialContinuation(const QString &videoId, b
 
     auto *reply = m_network.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;
+    monitorYouTubeReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, videoId, allowChannelFallback]() {
         if (m_stopping || m_youtubeReply != reply) {
             reply->deleteLater();
@@ -1640,6 +1659,7 @@ void ChatController::pollYouTube()
 
     auto *reply = m_network.post(request, QJsonDocument(requestBody).toJson(QJsonDocument::Compact));
     m_youtubeReply = reply;
+    monitorYouTubeReply(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (m_stopping || m_youtubeReply != reply) { reply->deleteLater(); return; }
         const QByteArray bytes = reply->readAll();

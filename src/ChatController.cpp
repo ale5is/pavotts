@@ -30,6 +30,15 @@ void updateAndroidOverlayEnabled(bool enabled)
         context.object<jobject>(), static_cast<jboolean>(enabled));
 }
 
+void updateAndroidAudioEnabled(bool enabled)
+{
+    const QJniObject context = QNativeInterface::QAndroidApplication::context();
+    QJniObject::callStaticMethod<void>(
+        "com/ale5is/pavotts/OverlayBridge", "setAudioEnabled",
+        "(Landroid/content/Context;Z)V",
+        context.object<jobject>(), static_cast<jboolean>(enabled));
+}
+
 void sendAndroidOverlayMessage(const QString &message)
 {
     QJniObject context(QNativeInterface::QAndroidApplication::context());
@@ -706,13 +715,17 @@ void ChatController::setOverlayEnabled(bool enabled)
 
 void ChatController::setTtsEnabled(bool enabled)
 {
-    if (m_ttsEnabled == enabled)
-        return;
+    const bool changed = m_ttsEnabled != enabled;
     m_ttsEnabled = enabled;
+#ifdef Q_OS_ANDROID
+    updateAndroidAudioEnabled(enabled);
+#endif
     if (!m_ttsEnabled)
         clearSpeechQueue();
-    emit settingsChanged();
-    saveSettings();
+    if (changed) {
+        emit settingsChanged();
+        saveSettings();
+    }
 }
 
 void ChatController::loadSettings()

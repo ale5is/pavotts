@@ -17,14 +17,13 @@
 #include <functional>
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
-#include <QNativeInterface>
 #endif
 
 #ifdef Q_OS_ANDROID
 namespace {
 void updateAndroidOverlayEnabled(bool enabled)
 {
-    QJniObject context(QNativeInterface::QAndroidApplication::context());
+    const QJniObject context = QNativeInterface::QAndroidApplication::context();
     QJniObject::callStaticMethod<void>(
         "com/ale5is/pavotts/OverlayBridge", "setEnabled",
         "(Landroid/content/Context;Z)V",

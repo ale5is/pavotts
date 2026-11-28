@@ -281,10 +281,6 @@ ApplicationWindow {
                             Label { text: "CHAT MULTIPLATAFORMA"; color: "white"; font.bold: true; font.pixelSize: 16 }
                             Item { Layout.fillWidth: true }
                             Label { text: chat.messages.length + " mensajes"; color: "#8195ae"; font.pixelSize: 11 }
-                            Button {
-                                text: chat.ttsEnabled ? "Desactivar TTS" : "Activar TTS"
-                                onClicked: chat.ttsEnabled = !chat.ttsEnabled
-                            }
                             Button { text: "Limpiar"; onClicked: chat.clearChat() }
                         }
                         ListView {
@@ -343,6 +339,10 @@ ApplicationWindow {
                     Label { text: !chat.ttsEnabled ? "◉ Solo chat · TTS desactivado" : (chat.speaking ? "🔊 Reproduciendo voz" : "◉ TTS activado · En espera"); color: chat.ttsEnabled ? (chat.speaking ? "#63e4b0" : "#90a2b8") : "#ffc078" }
                     Item { Layout.fillWidth: true }
                     Label { text: "Cola: " + chat.queuedSpeech; color: "#90a2b8" }
+                    ActionButton {
+                        text: chat.ttsEnabled ? "Desactivar TTS" : "Activar TTS"
+                        onClicked: chat.ttsEnabled = !chat.ttsEnabled
+                    }
                 }
             }
         }

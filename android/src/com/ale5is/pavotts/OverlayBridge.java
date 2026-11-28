@@ -11,6 +11,7 @@ public final class OverlayBridge {
     private static final String PREFS = "pavotts_overlay";
     private static final String ENABLED = "enabled";
     private static final String AUDIO_ENABLED = "audio_enabled";
+    private static final String TICKER_ENABLED = "ticker_enabled";
 
     private OverlayBridge() {}
 
@@ -35,6 +36,12 @@ public final class OverlayBridge {
         reconcile(context);
     }
 
+    public static void setTickerEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(TICKER_ENABLED, enabled).apply();
+        reconcile(context);
+    }
+
     public static void onActivityResumed(Activity activity) {
         boolean overlay = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(ENABLED, false);
@@ -48,8 +55,8 @@ public final class OverlayBridge {
     }
 
     public static void update(Context context, String message) {
-        if (!context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean(ENABLED, false))
+        android.content.SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!prefs.getBoolean(ENABLED, false) && !prefs.getBoolean(TICKER_ENABLED, false))
             return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context))
             return;
@@ -64,7 +71,9 @@ public final class OverlayBridge {
                 .getBoolean(ENABLED, false);
         boolean audio = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getBoolean(AUDIO_ENABLED, false);
-        if (!overlay && !audio) {
+        boolean ticker = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(TICKER_ENABLED, false);
+        if (!overlay && !ticker && !audio) {
             context.stopService(new Intent(context, ChatOverlayService.class));
             return;
         }

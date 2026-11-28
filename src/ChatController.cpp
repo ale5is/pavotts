@@ -15,6 +15,33 @@
 #include <QSslSocket>
 #include <QUuid>
 #include <functional>
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QNativeInterface>
+#endif
+
+#ifdef Q_OS_ANDROID
+namespace {
+void updateAndroidOverlayEnabled(bool enabled)
+{
+    QJniObject context(QNativeInterface::QAndroidApplication::context());
+    QJniObject::callStaticMethod<void>(
+        "com/ale5is/pavotts/OverlayBridge", "setEnabled",
+        "(Landroid/content/Context;Z)V",
+        context.object<jobject>(), static_cast<jboolean>(enabled));
+}
+
+void sendAndroidOverlayMessage(const QString &message)
+{
+    QJniObject context(QNativeInterface::QAndroidApplication::context());
+    const QJniObject javaMessage = QJniObject::fromString(message);
+    QJniObject::callStaticMethod<void>(
+        "com/ale5is/pavotts/OverlayBridge", "update",
+        "(Landroid/content/Context;Ljava/lang/String;)V",
+        context.object<jobject>(), javaMessage.object<jstring>());
+}
+}
+#endif
 
 namespace {
 QString cleanText(QString value)
@@ -647,6 +674,7 @@ double ChatController::volume() const { return m_volume; }
 bool ChatController::connected() const { return m_connected; }
 bool ChatController::speaking() const { return m_speaking; }
 bool ChatController::ttsEnabled() const { return m_ttsEnabled; }
+bool ChatController::overlayEnabled() const { return m_overlayEnabled; }
 int ChatController::queuedSpeech() const { return m_speechQueue.size(); }
 
 QString ChatController::blacklistText() const
@@ -664,6 +692,19 @@ void ChatController::setVoice(const QString &v) { if (m_voice != v) { m_voice = 
 void ChatController::setCharacter(const QString &v) { if (m_character != v) { m_character = v; emit settingsChanged(); } }
 void ChatController::setCommandPrefix(const QString &v) { if (m_commandPrefix != v) { m_commandPrefix = v; emit settingsChanged(); } }
 void ChatController::setVolume(double v) { m_volume = qBound(0.0, v, 1.0); m_audioOutput.setVolume(m_volume); emit settingsChanged(); }
+void ChatController::setOverlayEnabled(bool enabled)
+{
+    m_overlayEnabled = enabled;
+#ifdef Q_OS_ANDROID
+    updateAndroidOverlayEnabled(enabled);
+#else
+    if (enabled)
+        setStatus(QStringLiteral("Superposición"), QStringLiteral("La cinta flotante solo está disponible en Android."));
+#endif
+    emit settingsChanged();
+    saveSettings();
+}
+
 void ChatController::setTtsEnabled(bool enabled)
 {
     if (m_ttsEnabled == enabled)
@@ -708,6 +749,7 @@ void ChatController::loadSettings()
     m_commandPrefix = o.value("prefijo").toString();
     m_volume = qBound(0.0, o.value("volumen").toDouble(1.0), 1.0);
     m_ttsEnabled = o.value("ttsEnabled").toBool(false);
+    m_overlayEnabled = o.value("overlayEnabled").toBool(false);
     const QStringList blocked = o.value("blacklist").toString().split(',', Qt::SkipEmptyParts);
     for (const QString &name : blocked)
         m_blacklist.insert(name.trimmed().toCaseFolded());
@@ -727,6 +769,7 @@ void ChatController::saveSettings()
     o.insert("prefijo", m_commandPrefix);
     o.insert("volumen", m_volume);
     o.insert("ttsEnabled", m_ttsEnabled);
+    o.insert("overlayEnabled", m_overlayEnabled);
     o.insert("blacklist", blacklistText().replace('\n', ','));
     QString configPath;
 #ifdef Q_OS_ANDROID
@@ -1773,6 +1816,10 @@ void ChatController::publishMessage(const QString &rawName, const QString &rawTe
     m_messages.append(item);
     while (m_messages.size() > 24) m_messages.removeFirst();
     emit messagesChanged();
+#ifdef Q_OS_ANDROID
+    if (m_overlayEnabled)
+        sendAndroidOverlayMessage(QStringLiteral("[%1] %2: %3").arg(platform, name, message));
+#endif
     processForSpeech(name, message);
 }
 

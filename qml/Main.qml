@@ -5,6 +5,7 @@ import QtQuick.Window
 
 ApplicationWindow {
     id: window
+    Component.onCompleted: chat.setOverlayEnabled(chat.overlayEnabled)
     width: 1280
     height: 720
     minimumWidth: 360
@@ -247,6 +248,39 @@ ApplicationWindow {
                                     font.pixelSize: 10
                                     wrapMode: Text.Wrap
                                 }
+                            }
+                        }
+                    }
+
+                    Panel {
+                        Layout.fillWidth: true
+                        implicitHeight: overlayColumn.implicitHeight + 28
+                        ColumnLayout {
+                            id: overlayColumn
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            Label { text: "CINTA FLOTANTE"; color: "#62c4ff"; font.bold: true; font.letterSpacing: 1.2 }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Switch {
+                                    text: chat.overlayEnabled ? "Superposición activada" : "Mostrar chat sobre otras apps"
+                                    checked: chat.overlayEnabled
+                                    onToggled: chat.setOverlayEnabled(checked)
+                                }
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Muestra cada mensaje completo en una cinta horizontal lenta, incluso encima de juegos. Al activarla por primera vez, Android te pedirá permiso para mostrar sobre otras aplicaciones. La cinta se desplaza a 42 dp/s y conserva los mensajes largos completos."
+                                color: "#91a4bd"
+                                font.pixelSize: 10
+                                wrapMode: Text.Wrap
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: "La superposición utiliza los mensajes que ya recibe PavoTTS; no agrega conexiones ni consultas de red."
+                                color: "#91a4bd"
+                                font.pixelSize: 10
+                                wrapMode: Text.Wrap
                             }
                         }
                     }

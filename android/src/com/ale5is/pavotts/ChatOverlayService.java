@@ -46,6 +46,7 @@ public final class ChatOverlayService extends Service {
     private WindowManager windowManager;
     private TextView ticker;
     private View bubble;
+    private View minimizeButton;
     private LinearLayout chatPanel;
     private View panelTitleView;
     private View panelCloseView;
@@ -53,6 +54,7 @@ public final class ChatOverlayService extends Service {
     private ScrollView chatScroll;
     private WindowManager.LayoutParams bubbleParams;
     private WindowManager.LayoutParams panelParams;
+    private boolean bubbleHiddenForPanel;
     private boolean panelVisible;
     private boolean animating;
     private PowerManager.WakeLock wakeLock;
@@ -142,6 +144,7 @@ public final class ChatOverlayService extends Service {
 
     private void removeBubble() {
         closePanel();
+        removeMinimizeButton();
         if (bubble != null) {
             try { windowManager.removeView(bubble); } catch (RuntimeException ignored) {}
             bubble = null;
@@ -387,10 +390,68 @@ public final class ChatOverlayService extends Service {
         try {
             windowManager.addView(chatPanel, panelParams);
             panelVisible = true;
+            if (bubble != null) {
+                try {
+                    windowManager.removeView(bubble);
+                    bubbleHiddenForPanel = true;
+                } catch (RuntimeException ignored) {
+                    bubbleHiddenForPanel = false;
+                }
+            }
+            showMinimizeButton();
         } catch (RuntimeException ignored) {
             panelParams = null;
             panelVisible = false;
+            restoreBubble();
         }
+    }
+
+    private void showMinimizeButton() {
+        if (bubbleParams == null || minimizeButton != null)
+            return;
+        TextView button = new TextView(this);
+        button.setText("−");
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(28);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0xFF2388E8);
+        background.setShape(GradientDrawable.OVAL);
+        background.setStroke(dp(1), 0xFF8CC8FF);
+        button.setBackground(background);
+        button.setElevation(dp(8));
+        button.setOnClickListener(v -> closePanel());
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                dp(BUBBLE_SIZE_DP), dp(BUBBLE_SIZE_DP), overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        params.gravity = Gravity.TOP | Gravity.LEFT;
+        params.x = bubbleParams.x;
+        params.y = bubbleParams.y;
+        try {
+            windowManager.addView(button, params);
+            minimizeButton = button;
+        } catch (RuntimeException ignored) {
+            minimizeButton = null;
+        }
+    }
+
+    private void removeMinimizeButton() {
+        if (minimizeButton != null) {
+            try { windowManager.removeView(minimizeButton); } catch (RuntimeException ignored) {}
+            minimizeButton = null;
+        }
+    }
+
+    private void restoreBubble() {
+        removeMinimizeButton();
+        if (bubbleHiddenForPanel && bubble != null && bubbleParams != null) {
+            try { windowManager.addView(bubble, bubbleParams); } catch (RuntimeException ignored) {}
+        }
+        bubbleHiddenForPanel = false;
     }
 
     private void headerCloseOnRight() {
@@ -417,6 +478,7 @@ public final class ChatOverlayService extends Service {
         }
         panelVisible = false;
         panelParams = null;
+        restoreBubble();
     }
 
     private int overlayType() {

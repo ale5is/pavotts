@@ -33,6 +33,7 @@ class ChatController final : public QObject
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY settingsChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY connectionChanged)
     Q_PROPERTY(bool speaking READ speaking NOTIFY speakingChanged)
+    Q_PROPERTY(bool ttsEnabled READ ttsEnabled WRITE setTtsEnabled NOTIFY settingsChanged)
     Q_PROPERTY(int queuedSpeech READ queuedSpeech NOTIFY speakingChanged)
 public:
     explicit ChatController(QObject *parent = nullptr);
@@ -53,6 +54,7 @@ public:
     double volume() const;
     bool connected() const;
     bool speaking() const;
+    bool ttsEnabled() const;
     int queuedSpeech() const;
     void setTwitchChannel(const QString &v);
     void setYoutubeChannel(const QString &v);
@@ -62,6 +64,7 @@ public:
     void setCharacter(const QString &v);
     void setCommandPrefix(const QString &v);
     void setVolume(double v);
+    void setTtsEnabled(bool enabled);
     Q_INVOKABLE void connectAll();
     Q_INVOKABLE void disconnectAll();
     Q_INVOKABLE void saveSettings();
@@ -122,7 +125,7 @@ private:
     QSet<QString> m_youtubeSeenIds, m_youtubeRejectedVideoIds;
     QQueue<QString> m_youtubeSeenOrder;
     int m_youtubePollDelay = 5000;
-    bool m_stopping = false, m_connected = false, m_speaking = false;
+    bool m_stopping = false, m_connected = false, m_speaking = false, m_ttsEnabled = false;
     bool m_twitchRejected = false, m_twitchAuthenticated = false, m_kickSubscribed = false;
     bool m_kickUseGenericRealtime = false;
     bool m_kickConnectAcknowledged = false;

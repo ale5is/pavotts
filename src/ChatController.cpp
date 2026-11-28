@@ -645,6 +645,7 @@ QString ChatController::commandPrefix() const { return m_commandPrefix; }
 double ChatController::volume() const { return m_volume; }
 bool ChatController::connected() const { return m_connected; }
 bool ChatController::speaking() const { return m_speaking; }
+bool ChatController::ttsEnabled() const { return m_ttsEnabled; }
 int ChatController::queuedSpeech() const { return m_speechQueue.size(); }
 
 QString ChatController::blacklistText() const
@@ -662,6 +663,16 @@ void ChatController::setVoice(const QString &v) { if (m_voice != v) { m_voice = 
 void ChatController::setCharacter(const QString &v) { if (m_character != v) { m_character = v; emit settingsChanged(); } }
 void ChatController::setCommandPrefix(const QString &v) { if (m_commandPrefix != v) { m_commandPrefix = v; emit settingsChanged(); } }
 void ChatController::setVolume(double v) { m_volume = qBound(0.0, v, 1.0); m_audioOutput.setVolume(m_volume); emit settingsChanged(); }
+void ChatController::setTtsEnabled(bool enabled)
+{
+    if (m_ttsEnabled == enabled)
+        return;
+    m_ttsEnabled = enabled;
+    if (!m_ttsEnabled)
+        clearSpeechQueue();
+    emit settingsChanged();
+    saveSettings();
+}
 
 void ChatController::loadSettings()
 {
@@ -695,6 +706,7 @@ void ChatController::loadSettings()
     m_character = o.value("caracter").toString();
     m_commandPrefix = o.value("prefijo").toString();
     m_volume = qBound(0.0, o.value("volumen").toDouble(1.0), 1.0);
+    m_ttsEnabled = o.value("ttsEnabled").toBool(false);
     const QStringList blocked = o.value("blacklist").toString().split(',', Qt::SkipEmptyParts);
     for (const QString &name : blocked)
         m_blacklist.insert(name.trimmed().toCaseFolded());
@@ -713,6 +725,7 @@ void ChatController::saveSettings()
     o.insert("caracter", m_character);
     o.insert("prefijo", m_commandPrefix);
     o.insert("volumen", m_volume);
+    o.insert("ttsEnabled", m_ttsEnabled);
     o.insert("blacklist", blacklistText().replace('\n', ','));
     QString configPath;
 #ifdef Q_OS_ANDROID
@@ -1734,7 +1747,7 @@ void ChatController::publishMessage(const QString &rawName, const QString &rawTe
 
 void ChatController::processForSpeech(const QString &name, const QString &rawText)
 {
-    if (m_blacklist.contains(name.toCaseFolded())) return;
+    if (!m_ttsEnabled || m_blacklist.contains(name.toCaseFolded())) return;
     QString text = cleanText(rawText);
     const QString prefix = m_character;
     if (!prefix.isEmpty()) {
@@ -1757,7 +1770,7 @@ void ChatController::processForSpeech(const QString &name, const QString &rawTex
 
 void ChatController::speakNext()
 {
-    if (m_speaking || m_speechQueue.isEmpty()) return;
+    if (!m_ttsEnabled || m_speaking || m_speechQueue.isEmpty()) return;
     m_speaking = true;
     emit speakingChanged();
     requestSpeech(m_speechQueue.dequeue());
@@ -1837,6 +1850,7 @@ void ChatController::finishSpeech()
 
 void ChatController::testTts()
 {
+    if (!m_ttsEnabled) return;
     if (m_speechQueue.size() >= MaxSpeechQueue) m_speechQueue.dequeue();
     m_speechQueue.enqueue(QStringLiteral("Hola, esta es una prueba usando la voz de TikTok."));
     emit speakingChanged();

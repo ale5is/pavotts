@@ -363,7 +363,7 @@ public final class ChatOverlayService extends Service {
         ticker.setText(next);
         ticker.setSelected(true);
         animating = true;
-        long duration = Math.max(6500L, Math.min(45000L, next.length() * 420L));
+        long duration = Math.max(6500L, Math.min(180000L, next.length() * 600L));
         handler.removeCallbacks(tickerAdvance);
         handler.postDelayed(tickerAdvance, duration);
     }

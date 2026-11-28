@@ -226,9 +226,26 @@ ApplicationWindow {
                                     Label { text: Math.round(chat.volume * 100) + "%"; color: "white"; Layout.minimumWidth: 42 }
                                 }
                                 RowLayout {
+                                    Layout.fillWidth: true
+                                    Switch {
+                                        text: chat.ttsEnabled ? "TTS activado" : "Activar TTS"
+                                        checked: chat.ttsEnabled
+                                        onToggled: chat.ttsEnabled = checked
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    Label { text: chat.queuedSpeech + " en cola"; color: "#91a4bd"; font.pixelSize: 11 }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
                                     ActionButton { text: "Probar voz"; enabled: chat.ttsEnabled; onClicked: chat.testTts() }
                                     Button { text: "Vaciar cola"; onClicked: chat.clearSpeechQueue() }
-                                    Label { text: chat.queuedSpeech + " en cola"; color: "#91a4bd"; font.pixelSize: 11 }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: "La prueba funciona sin conectar Twitch, Kick ni YouTube. Solo necesitás configurar el TikTok Session ID y la voz."
+                                    color: "#91a4bd"
+                                    font.pixelSize: 10
+                                    wrapMode: Text.Wrap
                                 }
                             }
                         }
